@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from "next/server";
-
 import { parseRole } from "./src/lib/roles";
 
 function buildRedirectURL(req: NextRequest, reason: string) {
@@ -17,21 +16,45 @@ export function middleware(req: NextRequest) {
   // Protect /upload
   if (pathname === "/upload" || pathname.startsWith("/upload/")) {
     if (!(role === "creator" || role === "moderator")) {
-      return NextResponse.redirect(buildRedirectURL(req, "forbidden"));
+      const noredirect = req.nextUrl.searchParams.get("noredirect") === "1";
+      if (noredirect) {
+        const url = req.nextUrl.clone();
+        url.pathname = "/403";
+        url.searchParams.set("reason", "forbidden");
+        url.searchParams.set("from", req.nextUrl.pathname);
+        const res = NextResponse.rewrite(url);
+        res.headers.set("x-role", role);
+        return res;
+      }
+      const res = NextResponse.redirect(buildRedirectURL(req, "forbidden"));
+      res.headers.set("x-role", role);
+      return res;
     }
   }
 
   // Protect /moderate
   if (pathname === "/moderate" || pathname.startsWith("/moderate/")) {
     if (role !== "moderator") {
-      return NextResponse.redirect(buildRedirectURL(req, "forbidden"));
+      const noredirect = req.nextUrl.searchParams.get("noredirect") === "1";
+      if (noredirect) {
+        const url = req.nextUrl.clone();
+        url.pathname = "/403";
+        url.searchParams.set("reason", "forbidden");
+        url.searchParams.set("from", req.nextUrl.pathname);
+        const res = NextResponse.rewrite(url);
+        res.headers.set("x-role", role);
+        return res;
+      }
+      const res = NextResponse.redirect(buildRedirectURL(req, "forbidden"));
+      res.headers.set("x-role", role);
+      return res;
     }
   }
-
-  return NextResponse.next();
+  const res = NextResponse.next();
+  res.headers.set("x-role", role);
+  return res;
 }
 
 export const config = {
   matcher: ["/upload/:path*", "/moderate/:path*"],
 };
-

@@ -30,6 +30,11 @@ Purpose: Notes for future development and recurring learnings. Keep this short, 
   - Offline smoke test (Node): `node scripts/codex-ci.js` → runs `tests/roles-smoke.js` which mirrors TS logic and verifies `parseRole` and `canAccess`.
 - **No external deps**:
   - Pure utilities in `src/lib`. Middleware and server actions use only Next built-ins.
+
+**Recent Additions**
+- **403 Page**: `app/403/page.tsx:1` renders a friendly forbidden page. Middleware rewrites unauthorized requests here when `?noredirect=1` is present, instead of redirecting to `/dev/role`.
+- **Debug Header**: Middleware sets `x-role: <role>` on responses it handles (including redirects/rewrites for protected paths) to aid debugging.
+- **Unit Tests (Vitest)**: `src/lib/roles.test.ts:1` covers `parseRole`, `isAllowed`, and `canAccess`. Run with `pnpm test`.
 **Architecture**
 - **App Router**: Pages under `app/` using Server/Client Components.
 - **Libraries**: Project utilities under `src/lib` to keep pure logic testable.
