@@ -10,35 +10,24 @@ Purpose: Notes for future development and recurring learnings. Keep this short, 
   - Role switcher page: `app/dev/role/page.tsx:1`
   - Role switcher client UI: `components/RoleSwitcher.tsx:1`
   - Gated pages: `app/upload/page.tsx:1`, `app/moderate/page.tsx:1`
+  - 403 page: `app/403/page.tsx:1`
   - Header role label: `app/layout.tsx:1`
-  - Node-only smoke test: `tests/roles-smoke.js:1`
-  - Minimal CI runner: `scripts/codex-ci.js:1`
+  - Unit tests: `src/lib/roles.test.ts:1`
 - **How gating works**:
   - Incoming request hits `middleware.ts`. It reads `role` from cookies, parses with `parseRole` (defaults to `viewer`).
   - Paths matching `/upload(:path*)` allow `creator|moderator`. Paths matching `/moderate(:path*)` allow `moderator` only.
-  - If unauthorized, middleware redirects to `/dev/role?reason=forbidden&from=<pathname>`.
+  - If unauthorized:
+    - With `?noredirect=1`: middleware rewrites to `/403?reason=forbidden&from=<pathname>`.
+    - Otherwise: redirects to `/dev/role?reason=forbidden&from=<pathname>`.
+  - Middleware always sets `x-role: <role>` header to aid debugging.
 - **Role selection UX**:
   - `/dev/role` is a Server Component that awaits `searchParams` and current role via `await getRoleFromCookies()`.
   - It renders `RoleSwitcher` (Client) with a server action `setRoleAction(nextRole)` that calls `await setRoleCookie(nextRole)` and `revalidatePath('/')`.
-  - If the user arrived via redirect, a notice is shown with a link back to `from`. No auto-redirect after switching; user can click back or navigate.
 - **Cookies**:
   - Name: `role`. Non-HttpOnly by design so the client can reflect the active role if needed. Access control is enforced server-side (middleware).
   - Options: `path=/`, `maxAge=30d`, `SameSite=Lax`, `Secure` in production.
 - **Header label**:
   - `app/layout.tsx` is an async Server Component. It awaits `getRoleFromCookies()` and shows `Role: <role>` with a link to `/dev/role`.
-- **Testing**:
-  - Offline smoke test (Node): `node scripts/codex-ci.js` → runs `tests/roles-smoke.js` which mirrors TS logic and verifies `parseRole` and `canAccess`.
-- **No external deps**:
-  - Pure utilities in `src/lib`. Middleware and server actions use only Next built-ins.
-
-**Recent Additions**
-- **403 Page**: `app/403/page.tsx:1` renders a friendly forbidden page. Middleware rewrites unauthorized requests here when `?noredirect=1` is present, instead of redirecting to `/dev/role`.
-- **Debug Header**: Middleware sets `x-role: <role>` on responses it handles (including redirects/rewrites for protected paths) to aid debugging.
-- **Unit Tests (Vitest)**: `src/lib/roles.test.ts:1` covers `parseRole`, `isAllowed`, and `canAccess`. Run with `pnpm test`.
-**Architecture**
-- **App Router**: Pages under `app/` using Server/Client Components.
-- **Libraries**: Project utilities under `src/lib` to keep pure logic testable.
-- **Middleware**: Root-level `middleware.ts` for route protection and redirects.
 
 **Roles & Gating**
 - **Types**: `src/lib/roles.ts:1` defines `Role = 'viewer' | 'creator' | 'moderator'` and pure helpers `parseRole`, `isAllowed`, `canAccess`.
@@ -46,40 +35,46 @@ Purpose: Notes for future development and recurring learnings. Keep this short, 
   - `/upload(:path*)`: allowed for `creator` and `moderator`.
   - `/moderate(:path*)`: allowed for `moderator` only.
   - All other routes are public.
-- **Cookie Name**: `role` (non-HttpOnly by design to allow client reflection; server-side middleware enforces access control).
+- **Cookie Name**: `role` (non-HttpOnly; server-side enforcement).
 
 **Cookies & Dynamic APIs (Next 15)**
-- Many dynamic APIs are async in Server Components: `cookies()`, `headers()`, and `searchParams`.
+- Dynamic APIs are async in Server Components: `cookies()`, `headers()`, and `searchParams`.
 - Always `await` these in Server Components to avoid sync dynamic API errors.
   - Example: `app/dev/role/page.tsx:1` awaits `searchParams` and uses `await getRoleFromCookies()`.
-- `src/lib/role-cookie.ts:1` exports async `getRoleFromCookies()` and `setRoleCookie()` using `next/headers::cookies()`.
+  - `src/lib/role-cookie.ts:1` exports async `getRoleFromCookies()` and `setRoleCookie()` using `next/headers::cookies()`.
 
-**Middleware**
-- File: `middleware.ts:1`.
-- Reads `role` cookie, parses with `parseRole`, and applies redirects:
-  - Unauthorized upload/moderation access → redirect to `/dev/role?reason=forbidden&from=<path>`.
-- Exported matcher: `['/upload/:path*', '/moderate/:path*']`.
+**Testing**
+- Vitest unit tests: `pnpm test` runs `src/lib/roles.test.ts` (JS DOM env is fine; tests are pure).
 
-**Role Switcher UI**
-- Server page: `app/dev/role/page.tsx:1` shows current role and three buttons.
-- Client component: `components/RoleSwitcher.tsx:1` renders buttons and calls the server action.
-- Server action: `setRoleAction(nextRole)` → `await setRoleCookie(nextRole)` → `revalidatePath('/')`.
-- Header role label: `app/layout.tsx:1` reads the role on the server and links to `/dev/role`.
-
-**Testing & CI**
-- Node-only smoke test mirrors TS logic in JS:
-  - `tests/roles-smoke.js:1` tests `parseRole` and `canAccess` behavior.
-  - Rationale: avoid TS runtime import (no extra deps like ts-node/tsx).
-- Minimal CI runner:
-  - `scripts/codex-ci.js:1` runs the smoke test: `node scripts/codex-ci.js`.
-
-**Local Dev Notes**
-- Start dev server: `pnpm dev`.
-- Verify gating manually:
-  - No cookie: `/upload` or `/moderate` → redirected to `/dev/role?reason=forbidden&from=<path>`.
-  - Role `creator`: `/upload` allowed, `/moderate` redirected.
-  - Role `moderator`: `/upload` and `/moderate` allowed.
-- Role persists 30 days via cookie (`SameSite=Lax`, `Secure` in production, not HttpOnly).
+**Database (Dev SQLite, Postgres-ready)**
+- **Port + Types**: DB access is behind a small port that keeps call sites stable.
+  - Types: `src/lib/db/types.ts`
+  - Port: `src/lib/db/port.ts`
+  - Loader: `src/lib/db/index.ts` (`getDb()` chooses adapter by `DB_DRIVER`)
+- **Adapters**:
+  - SQLite (default in dev/tests): `src/lib/db/sqlite.ts` (better‑sqlite3). Ensures schema and index on load. Stores `sizesJson` as JSON string in a TEXT column. Singleton connection.
+  - Postgres (Supabase-ready): `src/lib/db/postgres.ts` (pg Pool). Ensures schema/index on first import. Uses JSONB for `sizesJson`. Not used unless `DB_DRIVER=postgres`.
+- **Schema** (both adapters create on init):
+  - Table `Photo`/"Photo": `id TEXT PK, status TEXT NOT NULL, origKey TEXT NOT NULL, sizesJson (TEXT/JSONB) NOT NULL, width INTEGER, height INTEGER, createdAt (TEXT/TIMESTAMPTZ) NOT NULL`
+  - Index on `(status, createdAt DESC)`.
+- **Env** (`.env.local`):
+  - `DB_DRIVER=sqlite | postgres` (default `sqlite`)
+  - `DATABASE_FILE=.data/db/dev.db` (SQLite path)
+  - `DATABASE_URL=postgresql://…` (used only when `DB_DRIVER=postgres`)
+- **Usage in server code**:
+  - `import { getDb } from '@/src/lib/db'`
+  - `const db = getDb();`
+  - Call methods (async): `await db.insertPhoto(...)`, `await db.listApproved(limit, offset)`, etc.
+  - Any API route using DB should also export: `export const runtime = 'nodejs';`
+- **Tasks**:
+  - Migrate (ensures schema): `pnpm db:migrate`
+  - Seed one photo: `pnpm db:seed`
+  - Open SQLite file: `pnpm db:open`
+- **Tests**:
+  - `tests/db.sqlite.spec.ts` exercises CRUD against SQLite.
+  - In restricted sandboxes, run with mock: `pnpm test:sandbox` (sets `MOCK_NATIVE=1`). Local dev should use real SQLite (`pnpm test`).
+- **Switching to Postgres**:
+  - Set `DB_DRIVER=postgres` and `DATABASE_URL=…` (Supabase connection string). Call sites do not change.
 
 **Common Errors & Fixes**
 - Error: “used `searchParams.reason`. `searchParams` should be awaited …”
@@ -87,13 +82,3 @@ Purpose: Notes for future development and recurring learnings. Keep this short, 
   - Fix: Accept `searchParams` as a Promise and `await` it before accessing properties.
 - TypeScript: `cookies()` types don’t allow sync `.get/.set`.
   - Fix: make cookie helpers async and `await cookies()` before using `.get/.set`.
-
-**Conventions**
-- Keep business logic (e.g., roles) framework-independent in `src/lib` for unit testing.
-- Client components should be thin; server actions own mutations like setting cookies.
-- Avoid external dependencies for simple utilities to keep the project lightweight.
-
-**Future Ideas**
-- Expand `canAccess` to support hierarchical ranks using `RANK` instead of lists.
-- Add a small server-side test harness with `node:test` for pure functions if needed.
-- Optional: surface the active role in a debug toolbar visible only in development.

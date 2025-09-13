@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { parseRole } from "./src/lib/roles";
+
+import { parseRole } from "@/src/lib/roles";
 
 function buildRedirectURL(req: NextRequest, reason: string) {
   const url = req.nextUrl.clone();
@@ -50,6 +51,7 @@ export function middleware(req: NextRequest) {
       return res;
     }
   }
+
   const res = NextResponse.next();
   res.headers.set("x-role", role);
   return res;

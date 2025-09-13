@@ -1,9 +1,9 @@
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
 
-import RoleSwitcher from "../../../components/RoleSwitcher";
-import { getRoleFromCookies, setRoleCookie } from "../../../src/lib/role-cookie";
-import type { Role } from "../../../src/lib/roles";
+import RoleSwitcher from "@/components/RoleSwitcher";
+import { getRoleFromCookies, setRoleCookie } from "@/src/lib/role-cookie";
+import type { Role } from "@/src/lib/roles";
 
 export default async function RolePage({
   searchParams,

@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 
-import { parseRole, type Role } from "./roles";
+import { parseRole, type Role } from "@/src/lib/roles";
 
 export const COOKIE_NAME = "role";
 
@@ -19,6 +19,5 @@ export async function setRoleCookie(role: Role): Promise<void> {
     maxAge: 60 * 60 * 24 * 30, // 30 days
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
-    // Intentionally not HttpOnly so client UI can read/reflect role if needed.
   });
 }

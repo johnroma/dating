@@ -1,4 +1,5 @@
 import Link from "next/link";
+
 import { getRoleFromCookies } from "../../src/lib/role-cookie";
 
 export default async function ForbiddenPage({

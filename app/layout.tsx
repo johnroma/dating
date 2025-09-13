@@ -25,14 +25,10 @@ export default async function RootLayout({
     <html lang="en">
       <body className={inter.className}>
         <header className="flex items-center justify-between border-b px-4 py-2 text-sm">
-          <Link className="font-semibold" href="/">
-            Dating
-          </Link>
+          <Link className="font-semibold" href="/">Dating</Link>
           <div>
-            Role: <span className="font-mono">{role}</span>{" "}
-            <Link className="underline" href="/dev/role">
-              (switch)
-            </Link>
+            Role: <span className="font-mono">{role}</span> {" "}
+            <Link className="underline" href="/dev/role">(switch)</Link>
           </div>
         </header>
         {children}
