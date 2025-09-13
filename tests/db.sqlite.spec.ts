@@ -4,7 +4,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 // For sandboxed runs (this agent), enable mock by setting MOCK_NATIVE=1
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-if (process.env.MOCK_NATIVE === '1') require('./helpers/mock-better-sqlite3').setupBetterSqlite3Mock();
+if (process.env.MOCK_NATIVE === '1')
+  require('./helpers/mock-better-sqlite3').setupBetterSqlite3Mock();
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -24,7 +25,7 @@ afterAll(() => {
 it('sqlite CRUD works', async () => {
   const { getDb } = await import('../src/lib/db');
   const db = getDb();
-  const id = `t-${  Date.now()}`;
+  const id = `t-${Date.now()}`;
 
   await db.insertPhoto({
     id,
@@ -44,7 +45,7 @@ it('sqlite CRUD works', async () => {
   expect((await db.getPhoto(id))!.status).toBe('APPROVED');
 
   const approved = await db.listApproved(10, 0);
-  expect(approved.some((p) => p.id === id)).toBe(true);
+  expect(approved.some(p => p.id === id)).toBe(true);
 
   await db.deletePhoto(id);
   expect(await db.getPhoto(id)).toBeUndefined();

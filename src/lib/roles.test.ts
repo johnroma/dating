@@ -43,4 +43,3 @@ describe('roles.ts', () => {
     expect(canAccess('public', 'viewer')).toBe(true); // no leading slash
   });
 });
-

@@ -10,7 +10,8 @@ let db: InstanceType<typeof Database> | null = null;
 
 function getConn() {
   if (db) return db;
-  const file = process.env.DATABASE_FILE || path.join(process.cwd(), '.data/db/dev.db');
+  const file =
+    process.env.DATABASE_FILE || path.join(process.cwd(), '.data/db/dev.db');
   const dir = path.dirname(file);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -50,7 +51,10 @@ function mapRow(row: unknown): Photo | undefined {
   if (!row || typeof row !== 'object') return undefined;
   const r = row as Record<string, unknown>;
   const sizesRaw = r['sizesJson'];
-  const sizes = typeof sizesRaw === 'string' ? JSON.parse(sizesRaw as string) : (sizesRaw as Record<string, string> | undefined);
+  const sizes =
+    typeof sizesRaw === 'string'
+      ? JSON.parse(sizesRaw as string)
+      : (sizesRaw as Record<string, string> | undefined);
   return {
     id: String(r['id']),
     status: r['status'] as PhotoStatus,
@@ -62,7 +66,7 @@ function mapRow(row: unknown): Photo | undefined {
   };
 }
 
-export const insertPhoto: DbPort['insertPhoto'] = (p) => {
+export const insertPhoto: DbPort['insertPhoto'] = p => {
   stmtInsert.run(
     p.id,
     p.status,
@@ -74,33 +78,50 @@ export const insertPhoto: DbPort['insertPhoto'] = (p) => {
   );
 };
 
-export const updatePhotoSizes: DbPort['updatePhotoSizes'] = (id, sizesJson, width, height) => {
-  stmtUpdateSizes.run(JSON.stringify(sizesJson || {}), width ?? null, height ?? null, id);
+export const updatePhotoSizes: DbPort['updatePhotoSizes'] = (
+  id,
+  sizesJson,
+  width,
+  height
+) => {
+  stmtUpdateSizes.run(
+    JSON.stringify(sizesJson || {}),
+    width ?? null,
+    height ?? null,
+    id
+  );
 };
 
 export const setStatus: DbPort['setStatus'] = (id, status) => {
   stmtSetStatus.run(status, id);
 };
 
-export const deletePhoto: DbPort['deletePhoto'] = (id) => {
+export const deletePhoto: DbPort['deletePhoto'] = id => {
   stmtDelete.run(id);
 };
 
-export const getPhoto: DbPort['getPhoto'] = (id) => {
+export const getPhoto: DbPort['getPhoto'] = id => {
   const row = stmtGet.get(id);
   return mapRow(row);
 };
 
-export const listApproved: DbPort['listApproved'] = (limit = 50, offset = 0) => {
+export const listApproved: DbPort['listApproved'] = (
+  limit = 50,
+  offset = 0
+) => {
   const rows = conn
-    .prepare('SELECT * FROM Photo WHERE status = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?')
+    .prepare(
+      'SELECT * FROM Photo WHERE status = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?'
+    )
     .all('APPROVED', limit, offset);
   return rows.map(mapRow).filter(Boolean) as Photo[];
 };
 
 export const listPending: DbPort['listPending'] = (limit = 50, offset = 0) => {
   const rows = conn
-    .prepare('SELECT * FROM Photo WHERE status = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?')
+    .prepare(
+      'SELECT * FROM Photo WHERE status = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?'
+    )
     .all('PENDING', limit, offset);
   return rows.map(mapRow).filter(Boolean) as Photo[];
 };

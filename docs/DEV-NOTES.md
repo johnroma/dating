@@ -3,6 +3,7 @@ Project: Dating (Next.js App Router)
 Purpose: Notes for future development and recurring learnings. Keep this short, practical, and updated alongside changes.
 
 **Current Setup & Flow**
+
 - **Files in place**:
   - Roles: `src/lib/roles.ts:1`
   - Cookie helpers: `src/lib/role-cookie.ts:1`
@@ -30,6 +31,7 @@ Purpose: Notes for future development and recurring learnings. Keep this short, 
   - `app/layout.tsx` is an async Server Component. It awaits `getRoleFromCookies()` and shows `Role: <role>` with a link to `/dev/role`.
 
 **Roles & Gating**
+
 - **Types**: `src/lib/roles.ts:1` defines `Role = 'viewer' | 'creator' | 'moderator'` and pure helpers `parseRole`, `isAllowed`, `canAccess`.
 - **Rules**:
   - `/upload(:path*)`: allowed for `creator` and `moderator`.
@@ -38,15 +40,18 @@ Purpose: Notes for future development and recurring learnings. Keep this short, 
 - **Cookie Name**: `role` (non-HttpOnly; server-side enforcement).
 
 **Cookies & Dynamic APIs (Next 15)**
+
 - Dynamic APIs are async in Server Components: `cookies()`, `headers()`, and `searchParams`.
 - Always `await` these in Server Components to avoid sync dynamic API errors.
   - Example: `app/dev/role/page.tsx:1` awaits `searchParams` and uses `await getRoleFromCookies()`.
   - `src/lib/role-cookie.ts:1` exports async `getRoleFromCookies()` and `setRoleCookie()` using `next/headers::cookies()`.
 
 **Testing**
+
 - Vitest unit tests: `pnpm test` runs `src/lib/roles.test.ts` (JS DOM env is fine; tests are pure).
 
 **Database (Dev SQLite, Postgres-ready)**
+
 - **Port + Types**: DB access is behind a small port that keeps call sites stable.
   - Types: `src/lib/db/types.ts`
   - Port: `src/lib/db/port.ts`
@@ -77,6 +82,7 @@ Purpose: Notes for future development and recurring learnings. Keep this short, 
   - Set `DB_DRIVER=postgres` and `DATABASE_URL=…` (Supabase connection string). Call sites do not change.
 
 **Common Errors & Fixes**
+
 - Error: “used `searchParams.reason`. `searchParams` should be awaited …”
   - Cause: Next 15 async dynamic API.
   - Fix: Accept `searchParams` as a Promise and `await` it before accessing properties.

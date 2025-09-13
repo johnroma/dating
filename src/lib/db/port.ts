@@ -16,4 +16,3 @@ export type DbPort = {
   countApproved(): number | Promise<number>;
   countPending(): number | Promise<number>;
 };
-

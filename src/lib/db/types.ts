@@ -1,6 +1,6 @@
 export type PhotoStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'PRIVATE';
 
-export interface Photo {
+export type Photo = {
   id: string;
   status: PhotoStatus;
   origKey: string;
@@ -8,5 +8,4 @@ export interface Photo {
   width?: number | null;
   height?: number | null;
   createdAt: string; // ISO
-}
-
+};

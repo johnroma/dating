@@ -24,7 +24,10 @@ const init = (async () => {
 
 function rowToPhoto(row: Record<string, unknown>): Photo {
   const sizesRaw = row['sizesJson'] ?? row['sizesjson'];
-  const sizes = typeof sizesRaw === 'string' ? JSON.parse(sizesRaw as string) : (sizesRaw as Record<string, string> | undefined);
+  const sizes =
+    typeof sizesRaw === 'string'
+      ? JSON.parse(sizesRaw as string)
+      : (sizesRaw as Record<string, string> | undefined);
   const createdAtRaw = row['createdAt'] ?? row['createdat'];
   return {
     id: String(row['id']),
@@ -33,11 +36,14 @@ function rowToPhoto(row: Record<string, unknown>): Photo {
     sizesJson: sizes || {},
     width: (row['width'] as number | null | undefined) ?? null,
     height: (row['height'] as number | null | undefined) ?? null,
-    createdAt: createdAtRaw instanceof Date ? createdAtRaw.toISOString() : String(createdAtRaw),
+    createdAt:
+      createdAtRaw instanceof Date
+        ? createdAtRaw.toISOString()
+        : String(createdAtRaw),
   };
 }
 
-export const insertPhoto: DbPort['insertPhoto'] = async (p) => {
+export const insertPhoto: DbPort['insertPhoto'] = async p => {
   await init;
   await pool.query(
     'INSERT INTO "Photo" (id, status, origKey, sizesJson, width, height, "createdAt") VALUES ($1,$2,$3,$4,$5,$6,$7)',
@@ -54,7 +60,12 @@ export const insertPhoto: DbPort['insertPhoto'] = async (p) => {
   );
 };
 
-export const updatePhotoSizes: DbPort['updatePhotoSizes'] = async (id, sizesJson, width, height) => {
+export const updatePhotoSizes: DbPort['updatePhotoSizes'] = async (
+  id,
+  sizesJson,
+  width,
+  height
+) => {
   await init;
   await pool.query(
     'UPDATE "Photo" SET sizesJson = $1, width = $2, height = $3 WHERE id = $4',
@@ -64,22 +75,30 @@ export const updatePhotoSizes: DbPort['updatePhotoSizes'] = async (id, sizesJson
 
 export const setStatus: DbPort['setStatus'] = async (id, status) => {
   await init;
-  await pool.query('UPDATE "Photo" SET status = $1 WHERE id = $2', [status, id]);
+  await pool.query('UPDATE "Photo" SET status = $1 WHERE id = $2', [
+    status,
+    id,
+  ]);
 };
 
-export const deletePhoto: DbPort['deletePhoto'] = async (id) => {
+export const deletePhoto: DbPort['deletePhoto'] = async id => {
   await init;
   await pool.query('DELETE FROM "Photo" WHERE id = $1', [id]);
 };
 
-export const getPhoto: DbPort['getPhoto'] = async (id) => {
+export const getPhoto: DbPort['getPhoto'] = async id => {
   await init;
-  const { rows } = await pool.query('SELECT * FROM "Photo" WHERE id = $1', [id]);
+  const { rows } = await pool.query('SELECT * FROM "Photo" WHERE id = $1', [
+    id,
+  ]);
   if (!rows[0]) return undefined;
   return rowToPhoto(rows[0]);
 };
 
-export const listApproved: DbPort['listApproved'] = async (limit = 50, offset = 0) => {
+export const listApproved: DbPort['listApproved'] = async (
+  limit = 50,
+  offset = 0
+) => {
   await init;
   const { rows } = await pool.query(
     'SELECT * FROM "Photo" WHERE status = $1 ORDER BY "createdAt" DESC LIMIT $2 OFFSET $3',
@@ -88,7 +107,10 @@ export const listApproved: DbPort['listApproved'] = async (limit = 50, offset = 
   return rows.map(rowToPhoto);
 };
 
-export const listPending: DbPort['listPending'] = async (limit = 50, offset = 0) => {
+export const listPending: DbPort['listPending'] = async (
+  limit = 50,
+  offset = 0
+) => {
   await init;
   const { rows } = await pool.query(
     'SELECT * FROM "Photo" WHERE status = $1 ORDER BY "createdAt" DESC LIMIT $2 OFFSET $3',
@@ -99,12 +121,18 @@ export const listPending: DbPort['listPending'] = async (limit = 50, offset = 0)
 
 export const countApproved: DbPort['countApproved'] = async () => {
   await init;
-  const { rows } = await pool.query('SELECT COUNT(*)::int as c FROM "Photo" WHERE status = $1', ['APPROVED']);
+  const { rows } = await pool.query(
+    'SELECT COUNT(*)::int as c FROM "Photo" WHERE status = $1',
+    ['APPROVED']
+  );
   return Number(rows[0]?.c ?? 0);
 };
 
 export const countPending: DbPort['countPending'] = async () => {
   await init;
-  const { rows } = await pool.query('SELECT COUNT(*)::int as c FROM "Photo" WHERE status = $1', ['PENDING']);
+  const { rows } = await pool.query(
+    'SELECT COUNT(*)::int as c FROM "Photo" WHERE status = $1',
+    ['PENDING']
+  );
   return Number(rows[0]?.c ?? 0);
 };

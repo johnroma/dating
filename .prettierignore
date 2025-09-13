@@ -1,0 +1,12 @@
+node_modules
+.next
+out
+dist
+build
+coverage
+.turbo
+*.min.js
+next-env.d.ts
+pnpm-lock.yaml
+package-lock.json
+yarn.lock

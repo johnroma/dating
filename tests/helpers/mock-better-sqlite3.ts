@@ -20,8 +20,17 @@ export function setupBetterSqlite3Mock() {
       run(...args: any[]) {
         const s = this.sql.toUpperCase();
         if (s.startsWith('INSERT INTO PHOTO')) {
-          const [id, status, origKey, sizesJson, width, height, createdAt] = args;
-          table.set(id, { id, status, origKey, sizesJson, width: width ?? null, height: height ?? null, createdAt });
+          const [id, status, origKey, sizesJson, width, height, createdAt] =
+            args;
+          table.set(id, {
+            id,
+            status,
+            origKey,
+            sizesJson,
+            width: width ?? null,
+            height: height ?? null,
+            createdAt,
+          });
           return { changes: 1 } as any;
         }
         if (s.startsWith('UPDATE PHOTO SET SIZESJSON')) {
@@ -56,9 +65,10 @@ export function setupBetterSqlite3Mock() {
         }
         if (s.startsWith('SELECT COUNT(*) AS C FROM PHOTO WHERE STATUS')) {
           const [status] = args;
-        let c = 0;
-        for (const r of Array.from(table.values())) if (r.status === status) c++;
-        return { c } as any;
+          let c = 0;
+          for (const r of Array.from(table.values()))
+            if (r.status === status) c++;
+          return { c } as any;
         }
         return undefined as any;
       }
@@ -66,9 +76,15 @@ export function setupBetterSqlite3Mock() {
         const s = this.sql.toUpperCase();
         if (s.startsWith('SELECT * FROM PHOTO WHERE STATUS')) {
           const [status, limit, offset] = args;
-          const rows = Array.from(table.values()).filter(r => r.status === status);
-          rows.sort((a,b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
-          return rows.slice(offset || 0, (offset || 0) + (limit || rows.length)).map(r => ({ ...r }));
+          const rows = Array.from(table.values()).filter(
+            r => r.status === status
+          );
+          rows.sort((a, b) =>
+            a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0
+          );
+          return rows
+            .slice(offset || 0, (offset || 0) + (limit || rows.length))
+            .map(r => ({ ...r }));
         }
         return [] as any;
       }
@@ -77,7 +93,9 @@ export function setupBetterSqlite3Mock() {
       constructor(_file: string) {}
       pragma(_s: string) {}
       exec(_s: string) {}
-      prepare(sql: string) { return new Prepared(sql); }
+      prepare(sql: string) {
+        return new Prepared(sql);
+      }
     }
     return { default: Database };
   });

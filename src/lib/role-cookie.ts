@@ -1,8 +1,8 @@
-import { cookies } from "next/headers";
+import { cookies } from 'next/headers';
 
-import { parseRole, type Role } from "@/src/lib/roles";
+import { parseRole, type Role } from '@/src/lib/roles';
 
-export const COOKIE_NAME = "role";
+export const COOKIE_NAME = 'role';
 
 export async function getRoleFromCookies(): Promise<Role> {
   const c = await cookies();
@@ -15,9 +15,9 @@ export async function setRoleCookie(role: Role): Promise<void> {
   c.set({
     name: COOKIE_NAME,
     value: role,
-    path: "/",
+    path: '/',
     maxAge: 60 * 60 * 24 * 30, // 30 days
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
   });
 }

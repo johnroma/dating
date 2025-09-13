@@ -9,7 +9,9 @@ function run(cmd, args, opts = {}) {
     process.exit(1);
   }
   if (p.status !== 0) {
-    console.error(`[codex-ci] Command exited with code ${p.status}: ${cmd} ${args.join(' ')}`);
+    console.error(
+      `[codex-ci] Command exited with code ${p.status}: ${cmd} ${args.join(' ')}`
+    );
     process.exit(p.status ?? 1);
   }
 }
@@ -18,4 +20,3 @@ function run(cmd, args, opts = {}) {
 run('node', ['tests/roles-smoke.js']);
 
 console.log('\n[codex-ci] ✅ All checks passed');
-

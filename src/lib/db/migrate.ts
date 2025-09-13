@@ -10,8 +10,7 @@ async function main() {
   console.log('Migration complete (schema ensured by adapter).');
 }
 
-main().catch((err) => {
+main().catch(err => {
   console.error(err);
   process.exit(1);
 });
-
