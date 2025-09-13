@@ -2,33 +2,64 @@
   "name": "dating",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "test": "vitest",
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
+    "lint:fix": "eslint . --ext .js,.jsx,.ts,.tsx --fix",
+    "test": "vitest run",
+    "db:migrate": "tsx src/lib/db/migrate.ts",
+    "db:seed": "tsx src/lib/db/seed.ts",
+    "db:open": "sqlite3 ${DATABASE_FILE:-.data/db/dev.db}",
+    "test:sandbox": "MOCK_NATIVE=1 vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "better-sqlite3": "^12.2.0",
     "next": "latest",
+    "npm-check-updates": "^18.1.1",
+    "pg": "^8.16.3",
     "react": "latest",
     "react-dom": "latest"
   },
   "devDependencies": {
+    "@eslint/js": "^9.0.0",
     "@tailwindcss/postcss": "^4.1.13",
+    "@next/eslint-plugin-next": "latest",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "latest",
+    "@types/pg": "^8.15.5",
     "@types/react": "latest",
     "@types/react-dom": "latest",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
     "@vitejs/plugin-react": "latest",
     "autoprefixer": "latest",
-    "eslint": "latest",
+    "eslint": "^9.0.0",
     "eslint-config-next": "latest",
+    "@eslint/eslintrc": "^3.1.0",
+    "eslint-plugin-import": "^2.29.0",
+    "eslint-plugin-jsx-a11y": "^6.8.0",
+    "eslint-plugin-react": "^7.34.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "eslint-plugin-react-refresh": "^0.4.0",
     "jsdom": "latest",
     "postcss": "latest",
     "tailwindcss": "latest",
+    "tsx": "latest",
     "typescript": "latest",
     "vitest": "latest"
   },
-  "packageManager": "pnpm@10.13.1"
+  "packageManager": "pnpm@10.16.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ],
+    "ignoredBuiltDependencies": [
+      "@tailwindcss/oxide",
+      "esbuild"
+    ]
+  }
 }
