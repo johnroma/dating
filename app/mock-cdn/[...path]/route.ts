@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 // At build time, Next inlines process.env.*; the unused branch is dead-code-eliminated.
 export const runtime = (
-  process.env.STORAGE_DRIVER === 'local' ? 'nodejs' : 'edge'
+  (process.env.STORAGE_DRIVER || 'local') === 'local' ? 'nodejs' : 'edge'
 ) as 'nodejs' | 'edge';
 
 export async function GET(
@@ -14,7 +14,7 @@ export async function GET(
   ctx: { params: Promise<{ path: string[] }> }
 ) {
   // PRODUCTION (R2): never serve from /mock-cdn — variants are on CDN_BASE_URL.
-  if (process.env.STORAGE_DRIVER !== 'local') {
+  if ((process.env.STORAGE_DRIVER || 'local') !== 'local') {
     return new NextResponse(null, {
       status: 410,
       headers: { 'Cache-Control': 'public, max-age=31536000, immutable' },
