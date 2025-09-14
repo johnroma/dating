@@ -32,6 +32,33 @@ export async function GET(
     return NextResponse.json({ error: 'bad path' }, { status: 400 });
   }
 
+  // Enforce status: only APPROVED are publicly served for non-moderators
+  try {
+    const [{ getDb }, { COOKIE_NAME }, { parseRole }] = await Promise.all([
+      import('@/src/lib/db'),
+      import('@/src/lib/role-cookie'),
+      import('@/src/lib/roles'),
+    ]);
+    const db = getDb();
+    const photo = await db.getPhoto(photoId);
+    const cookie = _req.headers.get('cookie') || '';
+    const roleCookie = cookie
+      .split(/;\s*/)
+      .map(kv => kv.split('='))
+      .find(([k]) => k === COOKIE_NAME)?.[1];
+    const role = parseRole(roleCookie);
+    const isModerator = role === 'moderator';
+    if (
+      !photo ||
+      photo.deletedat ||
+      (photo.status !== 'APPROVED' && !isModerator)
+    ) {
+      return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+    }
+  } catch {
+    // If anything goes wrong enforcing, fall through to 404/serve from disk
+  }
+
   const abs = join(
     process.cwd(),
     '.data',
