@@ -2,25 +2,30 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import crypto from 'node:crypto';
+
 import { NextResponse } from 'next/server';
 
 import { getDb } from '@/src/lib/db';
 import { getRoleFromCookies } from '@/src/lib/role-cookie';
 
-export async function POST(_req: Request, { params }: { params: { id: string } }) {
+export async function POST(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
   const role = await getRoleFromCookies();
   if (role !== 'moderator')
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
   const db = getDb();
-  await db.softDeletePhoto?.(params.id);
+  const { id } = await params;
+  await db.softDeletePhoto?.(id);
 
   // Audit
   try {
     const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
     const a = {
       id: crypto.randomUUID(),
-      photoId: params.id,
+      photoId: id,
       action: 'SOFT_DELETED',
       actor: 'moderator',
       reason: null as string | null,
@@ -33,8 +38,9 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
       const { insertAudit } = await import('@/src/lib/db/sqlite');
       insertAudit(a);
     }
-  } catch {}
+  } catch {
+    // ignore audit log errors
+  }
 
   return NextResponse.json({ ok: true });
 }
-

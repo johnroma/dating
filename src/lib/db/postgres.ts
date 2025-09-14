@@ -141,7 +141,9 @@ export const deletePhoto: DbPort['deletePhoto'] = async id => {
   await pool.query('DELETE FROM "Photo" WHERE id = $1', [id]);
 };
 
-export const softDeletePhoto: NonNullable<DbPort['softDeletePhoto']> = async id => {
+export const softDeletePhoto: NonNullable<
+  DbPort['softDeletePhoto']
+> = async id => {
   await init;
   await pool.query(
     'UPDATE "Photo" SET "deletedAt" = now(), "updatedAt" = now() WHERE id = $1',

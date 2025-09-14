@@ -29,7 +29,9 @@ export async function POST(req: Request) {
   if (!allowed)
     return NextResponse.json({ error: 'rate_limited' }, { status: 429 });
 
-  const { key, pHash, idempotencyKey } = (await req.json().catch(() => ({}))) as {
+  const { key, pHash, idempotencyKey } = (await req
+    .json()
+    .catch(() => ({}))) as {
     key?: string;
     pHash?: string;
     idempotencyKey?: string;
@@ -64,7 +66,9 @@ export async function POST(req: Request) {
         const { upsertIngestKey } = await import('@/src/lib/db/sqlite');
         upsertIngestKey(idem, existing.id);
       }
-    } catch {}
+    } catch {
+      // ignore ingest key upsert errors
+    }
     return NextResponse.json({
       id: existing.id,
       status: existing.status,
@@ -95,7 +99,9 @@ export async function POST(req: Request) {
         });
       }
     }
-  } catch {}
+  } catch {
+    // ignore ingest key upsert errors
+  }
 
   // role-based quotas using cookie role from Request headers (avoid Next dynamic API in tests)
   const quota = getRoleQuota(role);
@@ -197,7 +203,9 @@ export async function POST(req: Request) {
       const { insertAudit } = await import('@/src/lib/db/sqlite');
       insertAudit(a);
     }
-  } catch {}
+  } catch {
+    // ignore audit log errors
+  }
 
   return NextResponse.json({
     id: photoId,

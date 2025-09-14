@@ -202,7 +202,10 @@ export const getByOrigKey: DbPort['getByOrigKey'] = origKey => {
 };
 
 // Step 7 helpers (not in DbPort on purpose; import directly when needed)
-export function upsertIngestKey(id: string, photoId: string): 'created' | 'exists' {
+export function upsertIngestKey(
+  id: string,
+  photoId: string
+): 'created' | 'exists' {
   const row = stmtGetIngestKey.get(id) as { photoId: string } | undefined;
   if (row?.photoId) return 'exists';
   stmtUpsertIngestKey.run(id, photoId, new Date().toISOString());

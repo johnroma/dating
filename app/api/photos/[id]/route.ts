@@ -2,34 +2,41 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import crypto from 'node:crypto';
+
 import { NextResponse } from 'next/server';
 
 import { getDb } from '@/src/lib/db';
 import { getRoleFromCookies } from '@/src/lib/role-cookie';
 import { getStorage } from '@/src/ports/storage';
 
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
   const role = await getRoleFromCookies();
   if (role !== 'moderator')
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   const db = getDb();
-  const photo = await db.getPhoto(params.id);
+  const { id } = await params;
+  const photo = await db.getPhoto(id);
   if (!photo) return NextResponse.json({ error: 'not_found' }, { status: 404 });
 
   // Attempt storage cleanup first; ignore failures to allow DB delete to proceed
   try {
     const storage = getStorage();
-    await storage.deleteAllForPhoto(params.id, photo.origKey);
-  } catch {}
+    await storage.deleteAllForPhoto(id, photo.origKey);
+  } catch {
+    // ignore storage cleanup errors
+  }
 
-  await db.deletePhoto(params.id);
+  await db.deletePhoto(id);
 
   // Audit
   try {
     const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
     const a = {
       id: crypto.randomUUID(),
-      photoId: params.id,
+      photoId: id,
       action: 'DELETED',
       actor: 'moderator',
       reason: null as string | null,
@@ -42,8 +49,9 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
       const { insertAudit } = await import('@/src/lib/db/sqlite');
       insertAudit(a);
     }
-  } catch {}
+  } catch {
+    // ignore audit log errors
+  }
 
   return NextResponse.json({ ok: true });
 }
-

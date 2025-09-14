@@ -6,10 +6,10 @@ export type Job =
   | { name: 'resize'; payload: { photoId: string } }
   | { name: 'delete_variants'; payload: { photoId: string; origKey: string } };
 
-export interface JobPort {
+export type JobPort = {
   enqueue(job: Job): Promise<void>;
   runInline(job: Job): Promise<void>;
-}
+};
 
 class InlineJobs implements JobPort {
   async enqueue(job: Job) {
@@ -28,4 +28,3 @@ export function getJobs(): JobPort {
 export function _setJobsForTests(j: JobPort) {
   impl = j;
 }
-
