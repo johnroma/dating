@@ -9,5 +9,7 @@ export type Photo = {
   height?: number | null;
   createdAt: string; // ISO
   updatedAt?: string | null; // ISO
+  pHash?: string | null;
+  duplicateOf?: string | null;
   rejectionReason?: string | null;
 };

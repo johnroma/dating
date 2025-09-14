@@ -15,6 +15,7 @@ export async function GET(
   { params }: { params: Promise<{ path: string | string[] }> }
 ) {
   if ((process.env.STORAGE_DRIVER || 'local').toLowerCase() === 'r2') {
+    // Local mock-cdn hit while STORAGE_DRIVER=r2. Check URLs.
     return NextResponse.json({ error: 'gone' }, { status: 410 });
   }
   const { path: raw } = await params;

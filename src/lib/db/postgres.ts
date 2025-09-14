@@ -17,11 +17,15 @@ const init = (async () => {
       width INTEGER,
       height INTEGER,
       "createdAt" TIMESTAMPTZ NOT NULL,
+      "pHash" TEXT,
+      "duplicateOf" TEXT,
       "updatedAt" TIMESTAMPTZ,
       "rejectionReason" TEXT
     );
     ALTER TABLE "Photo" ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMPTZ;
     ALTER TABLE "Photo" ADD COLUMN IF NOT EXISTS "rejectionReason" TEXT;
+    ALTER TABLE "Photo" ADD COLUMN IF NOT EXISTS "pHash" TEXT;
+    ALTER TABLE "Photo" ADD COLUMN IF NOT EXISTS "duplicateOf" TEXT;
     CREATE INDEX IF NOT EXISTS photo_status_created ON "Photo"(status, "createdAt" DESC);
   `);
 })();
@@ -48,6 +52,14 @@ function rowToPhoto(row: Record<string, unknown>): Photo {
       (row['updatedAt'] ?? row['updatedat'])
         ? new Date(String(row['updatedAt'] ?? row['updatedat'])).toISOString()
         : null,
+    pHash:
+      (row['pHash'] ?? row['phash'])
+        ? String(row['pHash'] ?? row['phash'])
+        : null,
+    duplicateOf:
+      (row['duplicateOf'] ?? row['duplicateof'])
+        ? String(row['duplicateOf'] ?? row['duplicateof'])
+        : null,
     rejectionReason:
       (row['rejectionReason'] ?? row['rejectionreason'])
         ? String(row['rejectionReason'] ?? row['rejectionreason'])
@@ -58,7 +70,7 @@ function rowToPhoto(row: Record<string, unknown>): Photo {
 export const insertPhoto: DbPort['insertPhoto'] = async p => {
   await init;
   await pool.query(
-    'INSERT INTO "Photo" (id, status, origKey, sizesJson, width, height, "createdAt", "updatedAt", "rejectionReason") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+    'INSERT INTO "Photo" (id, status, origKey, sizesJson, width, height, "createdAt", "updatedAt", "rejectionReason", "pHash", "duplicateOf") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
     [
       p.id,
       p.status,
@@ -70,6 +82,8 @@ export const insertPhoto: DbPort['insertPhoto'] = async p => {
       p.createdAt,
       p.updatedAt ?? p.createdAt,
       p.rejectionReason ?? null,
+      p.pHash ?? null,
+      p.duplicateOf ?? null,
     ]
   );
 };
@@ -106,6 +120,16 @@ export const getPhoto: DbPort['getPhoto'] = async id => {
   const { rows } = await pool.query('SELECT * FROM "Photo" WHERE id = $1', [
     id,
   ]);
+  if (!rows[0]) return undefined;
+  return rowToPhoto(rows[0]);
+};
+
+export const getByOrigKey: DbPort['getByOrigKey'] = async origKey => {
+  await init;
+  const { rows } = await pool.query(
+    'SELECT * FROM "Photo" WHERE "origKey" = $1 LIMIT 1',
+    [origKey]
+  );
   if (!rows[0]) return undefined;
   return rowToPhoto(rows[0]);
 };

@@ -35,6 +35,18 @@ export async function POST(req: Request) {
   };
   if (!key) return NextResponse.json({ error: 'missing_key' }, { status: 400 });
 
+  // Idempotency: if a photo with this origKey exists, return it instead of inserting again
+  const db = getDb();
+  const existing = await db.getByOrigKey?.(key);
+  if (existing) {
+    return NextResponse.json({
+      id: existing.id,
+      status: existing.status,
+      sizes: existing.sizesJson,
+      duplicateOf: existing.duplicateOf ?? null,
+    });
+  }
+
   // role-based quotas using cookie role from Request headers (avoid Next dynamic API in tests)
   const cookieHeader = req.headers.get('cookie') || '';
   const roleCookie = cookieHeader
@@ -57,7 +69,6 @@ export async function POST(req: Request) {
   // optional duplicate detection (stub)
   const duplicateOf = pHash ? await findDuplicateByHash(pHash) : undefined;
 
-  const db = getDb();
   const storage = getStorage();
   const photoId = crypto.randomUUID();
   const origAbs = origPath(key);
@@ -120,6 +131,8 @@ export async function POST(req: Request) {
     width,
     height,
     createdAt: new Date().toISOString(),
+    pHash: pHash || null,
+    duplicateOf: duplicateOf || null,
   });
 
   return NextResponse.json({
