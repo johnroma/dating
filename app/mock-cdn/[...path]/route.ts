@@ -6,25 +6,30 @@ import path from 'node:path';
 import { NextResponse } from 'next/server';
 
 import { getDb } from '@/src/lib/db';
+import { getRoleFromCookies } from '@/src/lib/role-cookie';
 import { CDN, exists } from '@/src/lib/storage/fs';
 
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ path: string | string[] }> }
 ) {
-  const resolvedParams = await params;
-  const raw = resolvedParams?.path;
+  if ((process.env.STORAGE_DRIVER || 'local').toLowerCase() === 'r2') {
+    return NextResponse.json({ error: 'gone' }, { status: 410 });
+  }
+  const { path: raw } = await params;
   const parts: string[] = raw ? (Array.isArray(raw) ? raw : [raw]) : [];
   const abs = path.join(process.cwd(), CDN, ...parts);
   if (!exists(abs))
     return NextResponse.json({ error: 'not found' }, { status: 404 });
 
-  // Enforce status: only APPROVED are publicly served
+  // Enforce status: only APPROVED are publicly served for non-moderators
   if (parts.length >= 2) {
     const photoId = parts[0];
     const db = getDb();
     const photo = await db.getPhoto(photoId);
-    if (!photo || photo.status !== 'APPROVED') {
+    const role = await getRoleFromCookies();
+    const isModerator = role === 'moderator';
+    if (!photo || (photo.status !== 'APPROVED' && !isModerator)) {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 });
     }
   }
