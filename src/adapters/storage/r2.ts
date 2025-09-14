@@ -43,6 +43,7 @@ export const storage: StoragePort = {
         Key: `orig/${key}`,
         Body: buf,
         ContentType: contentType,
+        ContentDisposition: `inline; filename="${key}"`,
       })
     );
   },

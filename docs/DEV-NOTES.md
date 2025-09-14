@@ -50,6 +50,41 @@ Purpose: Notes for future development and recurring learnings. Keep this short, 
 
 - Vitest unit tests: `pnpm test` runs `src/lib/roles.test.ts` (JS DOM env is fine; tests are pure).
 
+## Safety, Quotas, and Upload Policy (Step 3.5)
+
+- New helpers:
+  - Upload policy: `src/ports/upload-policy.ts:1` provides adapter-aware guarantees (max bytes, MIME whitelist) to avoid double-guarding when a vendor already enforces limits.
+  - Magic-byte sniff: `src/lib/images/sniff.ts:1` detects JPEG/PNG/WebP by header.
+  - Dimension guard: `src/lib/images/guard.ts:1` enforces `maxPixels`, `maxW`, `maxH`.
+  - Perceptual hash: `src/lib/images/hash.ts:1` computes 64-bit dHash hex and Hamming distance.
+  - Rate limiting: `src/lib/rate/limiter.ts:1` in-memory token bucket and `ipFromHeaders`.
+  - Quotas: `src/lib/quotas.ts:1` creator quotas and minimal usage counting via `getDb().countApproved()`.
+  - Dupes stub: `src/lib/images/dupes.ts:1` placeholder lookup for pHash duplicates.
+
+- Route augmentations:
+  - `app/api/ut/upload/route.ts:1`
+    - Adds rate limiting per-IP (`RATE_UPLOADS_PER_MINUTE`).
+    - Uses `getUploadCapabilities()` to conditionally apply size/MIME guards.
+    - Sniffs magic bytes to validate/derive MIME; enforces dimensions via sharp metadata.
+    - Saves original as before and now returns `{ key, pHash }` (pHash used at ingest time).
+  - `app/api/photos/ingest/route.ts:1`
+    - Adds rate limiting per-IP (`RATE_INGESTS_PER_MINUTE`).
+    - Enforces role-based quotas (creator) using cookie role from Request headers, not Next dynamic API.
+    - Accepts optional `pHash` and runs duplicate-detection stub (`duplicateOf` returned in JSON, often `null`).
+
+- CDN route moderation check:
+  - `app/mock-cdn/[...path]/route.ts:1` reads the role from the incoming Request cookie header and parses it via `parseRole` to avoid Next’s dynamic API in tests.
+
+- Env additions (`.env.example:1`):
+  - Safety: `UPLOAD_MAX_PIXELS`, `UPLOAD_MAX_WIDTH`, `UPLOAD_MAX_HEIGHT`
+  - Rate limit: `RATE_UPLOADS_PER_MINUTE`, `RATE_INGESTS_PER_MINUTE`
+  - Quotas: `QUOTA_CREATOR_MAX_PHOTOS`, `QUOTA_CREATOR_MAX_BYTES`
+
+- Notes:
+  - When `UPLOAD_DRIVER=uploadthing` later, `getUploadCapabilities()` can return vendor-enforced limits so we skip local guards.
+  - The upload route now computes pHash but the UI remains unchanged; ingest accepts pHash if provided.
+
+
 ## Upload Pipeline (Local, UploadThing-shaped)
 
 - Packages: `sharp`, `uuid`, `mime` added. `test:watch` script added.
@@ -190,3 +225,11 @@ Notes
 
 - All local data stays under `.data/` (ignored by Git).
 - When switching to R2 in prod, ensure `CDN_BASE_URL` is set and reachable so Next/Image can optimize remote images.
+
+## Testing & CI Notes
+
+- Route testing: Avoid using Next’s dynamic APIs (`cookies()`) during bare handler invocation in Vitest. For request-scoped role:
+  - Parse from `req.headers.get('cookie')` and use `parseRole()`.
+- Client components in tests: mock `next/navigation`’s `useRouter` in tests like `app/page.test.tsx:1` so components render without an App Router.
+- `src/lib/images/hash.ts:1` uses BigInt. Typecheck requires `tsconfig.json` `target` ≥ `es2020`, or refactor to avoid BigInt.
+- `next/font` build in restricted networks can fail fetching Google Fonts; either allow network in CI or configure local fonts/fallback.

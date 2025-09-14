@@ -27,6 +27,8 @@ function getConn() {
       width INTEGER,
       height INTEGER,
       createdAt TEXT NOT NULL,
+      pHash TEXT,
+      duplicateOf TEXT,
       updatedAt TEXT,
       rejectionReason TEXT
     );
@@ -43,13 +45,23 @@ function getConn() {
   } catch {
     // already has column
   }
+  try {
+    db.exec('ALTER TABLE Photo ADD COLUMN pHash TEXT');
+  } catch {
+    // Column already exists
+  }
+  try {
+    db.exec('ALTER TABLE Photo ADD COLUMN duplicateOf TEXT');
+  } catch {
+    // Column already exists
+  }
   return db;
 }
 
 const conn = getConn();
 
 const stmtInsert = conn.prepare(
-  'INSERT INTO Photo (id, status, origKey, sizesJson, width, height, createdAt, updatedAt, rejectionReason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  'INSERT INTO Photo (id, status, origKey, sizesJson, width, height, createdAt, updatedAt, rejectionReason, pHash, duplicateOf) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
 );
 
 const stmtUpdateSizes = conn.prepare(
@@ -61,6 +73,9 @@ const stmtSetStatus = conn.prepare(
 );
 const stmtDelete = conn.prepare('DELETE FROM Photo WHERE id = ?');
 const stmtGet = conn.prepare('SELECT * FROM Photo WHERE id = ?');
+const stmtGetByOrig = conn.prepare(
+  'SELECT * FROM Photo WHERE origKey = ? LIMIT 1'
+);
 
 function mapRow(row: unknown): Photo | undefined {
   if (!row || typeof row !== 'object') return undefined;
@@ -79,6 +94,8 @@ function mapRow(row: unknown): Photo | undefined {
     height: (r['height'] as number | null | undefined) ?? null,
     createdAt: String(r['createdAt']),
     updatedAt: (r['updatedAt'] as string | null | undefined) ?? null,
+    pHash: (r['pHash'] as string | null | undefined) ?? null,
+    duplicateOf: (r['duplicateOf'] as string | null | undefined) ?? null,
     rejectionReason:
       (r['rejectionReason'] as string | null | undefined) ?? null,
   };
@@ -94,7 +111,9 @@ export const insertPhoto: DbPort['insertPhoto'] = p => {
     p.height ?? null,
     p.createdAt,
     p.updatedAt ?? p.createdAt,
-    p.rejectionReason ?? null
+    p.rejectionReason ?? null,
+    p.pHash ?? null,
+    p.duplicateOf ?? null
   );
 };
 
@@ -123,6 +142,11 @@ export const deletePhoto: DbPort['deletePhoto'] = id => {
 
 export const getPhoto: DbPort['getPhoto'] = id => {
   const row = stmtGet.get(id);
+  return mapRow(row);
+};
+
+export const getByOrigKey: DbPort['getByOrigKey'] = origKey => {
+  const row = stmtGetByOrig.get(origKey);
   return mapRow(row);
 };
 

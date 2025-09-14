@@ -9,7 +9,8 @@ const config: NextConfig = (() => {
       out.images = {
         remotePatterns: [
           {
-            protocol: (u.protocol.replace(':', '') as 'http' | 'https') || 'https',
+            protocol:
+              (u.protocol.replace(':', '') as 'http' | 'https') || 'https',
             hostname: u.hostname,
             port: u.port || undefined,
             pathname: '/cdn/**',
