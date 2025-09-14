@@ -28,6 +28,15 @@ const config: NextConfig = (() => {
       // ignore invalid URL
     }
   }
+  // Exclude heavy native deps from output file tracing to keep bundles slim
+  const withTraceExcludes = out as unknown as {
+    experimental?: { outputFileTracingExcludes?: Record<string, string[]> };
+  };
+  withTraceExcludes.experimental = Object.assign({}, out.experimental, {
+    outputFileTracingExcludes: {
+      '*': ['**/better-sqlite3/**'],
+    },
+  });
   // Ensure optional native modules are treated as externals when not referenced.
   // This helps avoid accidentally bundling them into API functions.
   out.webpack = (config, { isServer }) => {
