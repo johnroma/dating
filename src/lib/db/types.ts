@@ -12,4 +12,5 @@ export type Photo = {
   pHash?: string | null;
   duplicateOf?: string | null;
   rejectionReason?: string | null;
+  deletedAt?: string | null;
 };

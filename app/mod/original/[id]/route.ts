@@ -21,6 +21,8 @@ export async function GET(
   const { id } = await params;
   const photo = await db.getPhoto(id);
   if (!photo) return NextResponse.json({ error: 'not found' }, { status: 404 });
+  if (photo.deletedAt)
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
   // If using R2/S3, redirect to a short-lived signed URL for the original
   if ((process.env.STORAGE_DRIVER || 'local').toLowerCase() === 'r2') {

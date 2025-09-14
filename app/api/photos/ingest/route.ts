@@ -29,16 +29,42 @@ export async function POST(req: Request) {
   if (!allowed)
     return NextResponse.json({ error: 'rate_limited' }, { status: 429 });
 
-  const { key, pHash } = (await req.json().catch(() => ({}))) as {
+  const { key, pHash, idempotencyKey } = (await req.json().catch(() => ({}))) as {
     key?: string;
     pHash?: string;
+    idempotencyKey?: string;
   };
   if (!key) return NextResponse.json({ error: 'missing_key' }, { status: 400 });
 
-  // Idempotency: if a photo with this origKey exists, return it instead of inserting again
+  // Determine actor role via cookie header for quotas/audit
   const db = getDb();
+  const cookieHeader = req.headers.get('cookie') || '';
+  const roleCookie = cookieHeader
+    .split(/;\s*/)
+    .map(kv => kv.split('='))
+    .find(([k]) => k === COOKIE_NAME)?.[1];
+  const role = parseRole(roleCookie) as Role;
+
+  // Step 7 idempotency (by explicit key or implicit key:<origKey>)
+  const idem = idempotencyKey || `key:${key}`;
+  const candidateId = crypto
+    .createHash('sha256')
+    .update(idem)
+    .digest('hex')
+    .slice(0, 24);
+  // Try to bind idem to an existing photo by origKey first
   const existing = await db.getByOrigKey?.(key);
   if (existing) {
+    try {
+      const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
+      if (driver === 'postgres') {
+        const { upsertIngestKey } = await import('@/src/lib/db/postgres');
+        await upsertIngestKey(idem, existing.id);
+      } else {
+        const { upsertIngestKey } = await import('@/src/lib/db/sqlite');
+        upsertIngestKey(idem, existing.id);
+      }
+    } catch {}
     return NextResponse.json({
       id: existing.id,
       status: existing.status,
@@ -47,13 +73,31 @@ export async function POST(req: Request) {
     });
   }
 
+  // If idem key already seen, return the known photo
+  try {
+    const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
+    let state: 'created' | 'exists' = 'created';
+    if (driver === 'postgres') {
+      const { upsertIngestKey } = await import('@/src/lib/db/postgres');
+      state = await upsertIngestKey(idem, candidateId);
+    } else {
+      const { upsertIngestKey } = await import('@/src/lib/db/sqlite');
+      state = upsertIngestKey(idem, candidateId);
+    }
+    if (state === 'exists') {
+      const prev = await db.getPhoto(candidateId);
+      if (prev) {
+        return NextResponse.json({
+          id: prev.id,
+          status: prev.status,
+          sizes: prev.sizesJson,
+          duplicateOf: prev.duplicateOf ?? null,
+        });
+      }
+    }
+  } catch {}
+
   // role-based quotas using cookie role from Request headers (avoid Next dynamic API in tests)
-  const cookieHeader = req.headers.get('cookie') || '';
-  const roleCookie = cookieHeader
-    .split(/;\s*/)
-    .map(kv => kv.split('='))
-    .find(([k]) => k === COOKIE_NAME)?.[1];
-  const role = parseRole(roleCookie) as Role;
   const quota = getRoleQuota(role);
   const usage = await getUsage();
   try {
@@ -70,7 +114,7 @@ export async function POST(req: Request) {
   const duplicateOf = pHash ? await findDuplicateByHash(pHash) : undefined;
 
   const storage = getStorage();
-  const photoId = crypto.randomUUID();
+  const photoId = candidateId; // deterministic id for idempotency
   const origAbs = origPath(key);
 
   // If using R2/S3, copy original from local FS (written by UT route) to bucket
@@ -134,6 +178,26 @@ export async function POST(req: Request) {
     pHash: pHash || null,
     duplicateOf: duplicateOf || null,
   });
+
+  // Audit
+  try {
+    const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
+    const a = {
+      id: crypto.randomUUID(),
+      photoId,
+      action: 'INGESTED',
+      actor: String(role),
+      reason: null as string | null,
+      at: new Date().toISOString(),
+    };
+    if (driver === 'postgres') {
+      const { insertAudit } = await import('@/src/lib/db/postgres');
+      await insertAudit(a);
+    } else {
+      const { insertAudit } = await import('@/src/lib/db/sqlite');
+      insertAudit(a);
+    }
+  } catch {}
 
   return NextResponse.json({
     id: photoId,

@@ -26,6 +26,8 @@ function getDb(): DbPort {
     setStatus: async (id, status, extras) =>
       (await load()).setStatus(id, status, extras),
     deletePhoto: async id => (await load()).deletePhoto(id),
+    softDeletePhoto: async id => (await load() as any).softDeletePhoto?.(id),
+    restorePhoto: async id => (await load() as any).restorePhoto?.(id),
     getPhoto: async id => (await load()).getPhoto(id),
     getByOrigKey: async origKey => (await load()).getByOrigKey(origKey),
     listApproved: async (limit, offset) =>

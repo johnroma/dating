@@ -14,6 +14,8 @@ export type DbPort = {
     extras?: { rejectionReason?: string | null }
   ): void | Promise<void>;
   deletePhoto(id: string): void | Promise<void>;
+  softDeletePhoto?(id: string): void | Promise<void>;
+  restorePhoto?(id: string): void | Promise<void>;
   getPhoto(id: string): Photo | undefined | Promise<Photo | undefined>;
   getByOrigKey(origKey: string): Photo | undefined | Promise<Photo | undefined>;
   listApproved(limit?: number, offset?: number): Photo[] | Promise<Photo[]>;
