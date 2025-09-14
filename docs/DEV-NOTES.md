@@ -50,6 +50,28 @@ Purpose: Notes for future development and recurring learnings. Keep this short, 
 
 - Vitest unit tests: `pnpm test` runs `src/lib/roles.test.ts` (JS DOM env is fine; tests are pure).
 
+## Upload Pipeline (Local, UploadThing-shaped)
+
+- Packages: `sharp`, `uuid`, `mime` added. `test:watch` script added.
+- Storage helper: `src/lib/storage/fs.ts:1` ensures `.data/storage` dirs on import and provides helpers:
+  - Originals: `.data/storage/photos-orig/<key>`; Variants: `.data/storage/photos-cdn/<photoId>/{sm,md,lg}.webp`.
+  - `origPath`, `variantPath`, `writeOriginal`, `writeVariant`, `readStream`, `exists`.
+- Resizing: `src/lib/images/resize.ts:1` with `SIZES = { sm:256, md:768, lg:1536 }` (max edge, keep aspect). `makeVariants({ photoId, origAbsPath })` writes WebP variants and returns `{ sizesJson, width, height }` where `sizesJson` uses `NEXT_PUBLIC_CDN_BASE_URL` (default `/mock-cdn`).
+- API routes:
+  - `POST /api/ut/upload` (nodejs, dynamic): multipart `file` (jpeg/png/webp), enforces `UPLOAD_MAX_BYTES` (default 10MB), saves original via `writeOriginal`, returns `{ key }` with `uuid.<ext>` (ext from mime type).
+  - `POST /api/photos/ingest` (nodejs, dynamic): body `{ key }`, generates variants via `makeVariants`, inserts Photo row with `APPROVED` status, returns `{ id, sizes }`.
+  - `GET /mock-cdn/<photoId>/<size>.webp`: streams variant with `Cache-Control: public, max-age=31536000, immutable`.
+- UI:
+  - `components/PhotoUploader.tsx:1` (Client) posts to upload then ingest, then `router.refresh()`.
+  - `app/upload/page.tsx:1` renders `PhotoUploader`.
+  - `app/page.tsx:1` shows a gallery (async Server Component wrapped in `Suspense`) using `next/image` with pass-through loader; URLs come from `sizesJson`.
+- Env:
+  - `.env.example` adds `UPLOAD_MAX_BYTES=10485760` and `NEXT_PUBLIC_CDN_BASE_URL=/mock-cdn`.
+- Tests (Vitest):
+  - `tests/resize.spec.ts:1` creates a tiny PNG with sharp, runs `makeVariants`, asserts files are WebP and contain no `Exif`.
+  - `tests/upload_ingest.spec.ts:1` posts a tiny PNG Blob to `/api/ut/upload`, then ingests; asserts original + variants exist and DB row is created.
+- Notes: sharp requires native build; `package.json` `pnpm.onlyBuiltDependencies` includes `sharp` for CI approval.
+
 **Database (Dev SQLite, Postgres-ready)**
 
 - **Port + Types**: DB access is behind a small port that keeps call sites stable.
