@@ -3,17 +3,38 @@ import { Pool } from 'pg';
 import type { DbPort } from './port';
 import type { Photo, PhotoStatus } from './types';
 
-// Use direct port (5432) instead of pooler (6543) to avoid timeout issues
-const connectionString = process.env.DATABASE_URL?.replace(
-  ':6543/',
-  ':5432/'
-).replace('/postgrespostgres', '/postgres');
+// Build connection string and SSL options from env
+const urlRaw = process.env.DATABASE_URL || '';
+const connectionString = urlRaw
+  ? urlRaw.replace(':6543/', ':5432/').replace('/postgrespostgres', '/postgres')
+  : urlRaw;
+
+// Optional strict TLS: provide CA via env (multi-line PEM or base64)
+const ca =
+  process.env.PG_CA_CERT ||
+  (process.env.PG_CA_CERT_B64
+    ? Buffer.from(process.env.PG_CA_CERT_B64, 'base64').toString('utf8')
+    : undefined);
+
+// Pragmatic TLS: encrypt without CA verification (libpq sslmode=require style)
+const noVerify =
+  process.env.PGSSL_NO_VERIFY === '1' ||
+  /\bsslmode=(?:require|allow|prefer|no-verify)\b/i.test(
+    connectionString || ''
+  );
+
+const ssl = ca
+  ? { ca, rejectUnauthorized: true }
+  : noVerify
+    ? { rejectUnauthorized: false }
+    : undefined; // default verification
+
 const pool = new Pool({
   connectionString,
   max: 10, // Maximum number of clients in the pool
   idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
   connectionTimeoutMillis: 10000, // Return an error after 10 seconds if connection could not be established
-  ssl: { rejectUnauthorized: false },
+  ssl,
 });
 
 // Handle pool errors
