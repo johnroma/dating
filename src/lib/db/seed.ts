@@ -6,11 +6,11 @@ async function main() {
   await db.insertPhoto({
     id,
     status: 'PENDING',
-    origKey: `.data/storage/photos-orig/${id}.bin`,
-    sizesJson: {},
+    origkey: `.data/storage/photos-orig/${id}.bin`,
+    sizesjson: {},
     width: null,
     height: null,
-    createdAt: new Date().toISOString(),
+    createdat: new Date().toISOString(),
   });
   console.log('Seed inserted:', id);
 }

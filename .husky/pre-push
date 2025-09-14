@@ -1,0 +1,22 @@
+#!/bin/sh
+# Run comprehensive checks before push
+
+echo "🚀 Running pre-push checks..."
+
+# 1. Run all tests
+echo "🧪 Running tests..."
+pnpm test
+if [ $? -ne 0 ]; then
+  echo "❌ Tests failed. Fix them before pushing."
+  exit 1
+fi
+
+# 2. Run full build to catch any issues
+echo "🏗️  Running production build..."
+pnpm build
+if [ $? -ne 0 ]; then
+  echo "❌ Build failed. Fix issues before pushing."
+  exit 1
+fi
+
+echo "✅ All pre-push checks passed! Ready to push."

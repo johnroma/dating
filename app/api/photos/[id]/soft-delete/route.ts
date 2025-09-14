@@ -25,7 +25,7 @@ export async function POST(
     const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
     const a = {
       id: crypto.randomUUID(),
-      photoId: id,
+      photoid: id,
       action: 'SOFT_DELETED',
       actor: 'moderator',
       reason: null as string | null,

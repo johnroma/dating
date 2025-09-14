@@ -32,19 +32,16 @@ export default function PhotoUploader() {
         body: JSON.stringify({ key, pHash }),
       });
       const igJson = await igRes.json();
-
-      // Check if this is a duplicate detection response
-      if (igJson.duplicateOf && igJson.message) {
-        setError(
-          `Duplicate image detected! This image is similar to an existing photo. ${igJson.message}`
-        );
-        return;
-      }
-
       if (!igRes.ok) throw new Error(igJson?.error || 'Ingest failed');
 
       setFile(null);
-      router.push(`/p/${igJson.id}`);
+
+      // Check if this is a duplicate
+      if (igJson.duplicateOf) {
+        setError(`This image is a duplicate of an existing photo.`);
+      } else {
+        router.push(`/p/${igJson.id}`);
+      }
     } catch (err: unknown) {
       const m = err instanceof Error ? err.message : String(err);
       setError(m || 'Unknown error');

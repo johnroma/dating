@@ -1,6 +1,3 @@
-// Select driver by env: 'sqlite' (default) or 'postgres'
-const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
-
 export * from './port';
 export { getDb };
 
@@ -13,9 +10,22 @@ type AdapterModule = typeof import('./sqlite') & {
 let cached: Promise<AdapterModule> | null = null;
 function load(): Promise<AdapterModule> {
   if (!cached) {
-    cached = (
-      driver === 'postgres' ? import('./postgres') : import('./sqlite')
-    ) as Promise<AdapterModule>;
+    const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
+    cached = (async () => {
+      try {
+        if (driver === 'postgres') return await import('./postgres');
+        return await import('./sqlite');
+      } catch (err: unknown) {
+        if (driver !== 'postgres') {
+          const e = err as Error & { message: string };
+          const msg =
+            'SQLite driver not available. On Vercel we skip optional deps (better-sqlite3). ' +
+            'Set DB_DRIVER=postgres with a valid DATABASE_URL, or install optional deps locally.';
+          e.message = `${msg}\nOriginal error: ${e.message}`;
+        }
+        throw err;
+      }
+    })() as Promise<AdapterModule>;
   }
   return cached;
 }
@@ -48,4 +58,9 @@ function getDb(): DbPort {
     listRecent: async (limit, offset) =>
       (await load()).listRecent(limit, offset),
   } satisfies DbPort;
+}
+
+// For tests to force adapter reload
+export function _resetDbSingleton() {
+  cached = null;
 }

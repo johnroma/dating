@@ -44,7 +44,7 @@ export default async function ModeratePage() {
             <div className='mb-2 overflow-hidden rounded'>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={p.sizesJson?.md || p.sizesJson?.sm}
+                src={p.sizesjson?.md || p.sizesjson?.sm}
                 alt={p.id}
                 className='h-48 w-full object-cover'
               />
@@ -56,7 +56,7 @@ export default async function ModeratePage() {
                 name='reason'
                 placeholder='Rejection reason (optional)'
                 className='flex-1 rounded border px-2 py-1 text-sm'
-                defaultValue={p.rejectionReason || ''}
+                defaultValue={p.rejectionreason || ''}
               />
               <button
                 className='rounded border bg-red-50 px-2 py-1 text-sm'

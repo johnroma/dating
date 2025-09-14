@@ -51,12 +51,8 @@ Purpose: short, practical notes kept in sync with code. Optimized for LLMs and h
 - **Quotas & rate limits**
   - `src/lib/quotas.ts`: simple per-role quotas (creator), usage based on counts for now.
   - `src/lib/rate/limiter.ts`: in-memory token bucket; also used by ingest.
-- **Duplicate Detection**
-  - `src/lib/images/hash.ts` + `src/lib/images/dupes.ts` (Hamming distance comparison)
-  - Uses perceptual hash (pHash) to detect similar images before upload
-  - Prevents duplicate uploads by comparing with recent photos (last 100)
-  - Hamming distance threshold: ≤5 (configurable, 0-2 = very similar, 3-5 = similar, 6+ = different)
-  - Returns existing photo details instead of uploading duplicate
+- **Dupes (stub)**
+  - `src/lib/images/hash.ts` + `src/lib/images/dupes.ts` (Hamming check placeholder).
 
 ---
 
@@ -68,15 +64,6 @@ Purpose: short, practical notes kept in sync with code. Optimized for LLMs and h
   - If `{ key }` already ingested, or `idempotencyKey` seen, returns the existing photo.
   - Enforces per-role quotas (reads `role` from cookie header to avoid dynamic API in tests).
   - Generates 3 WebP variants and uploads via storage driver (and copies original to R2 in R2 mode).
-  - **Duplicate detection**: Prevents duplicate uploads using perceptual hash comparison:
-    - Compares pHash with recent photos (last 100) using Hamming distance
-    - Returns existing photo details if duplicate found (no upload/storage)
-    - Threshold: Hamming distance ≤5 (configurable)
-  - **URL validation**: Validates generated image URLs before database storage to prevent 404 errors:
-    - R2 mode: Ensures URLs have correct base domain and `/cdn/{photoId}/{size}.webp` path structure
-    - Local mode: Ensures URLs have correct `/mock-cdn/{photoId}/{size}.webp` path structure
-    - Validates photoId inclusion and `.webp` extension
-    - If validation fails, cleans up uploaded files and returns 500 error
   - Inserts row with `status: 'APPROVED'` and writes an `AuditLog: 'INGESTED'`.
 - **Soft delete / restore / hard delete** (moderator only)
   - `POST /api/photos/[id]/soft-delete` → sets `deletedAt` (hidden from gallery/CDN; originals blocked)

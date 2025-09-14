@@ -26,7 +26,7 @@ export default async function PhotoPage({
     );
   }
 
-  const url = photo.sizesJson?.lg || photo.sizesJson?.md || photo.sizesJson?.sm;
+  const url = photo.sizesjson?.lg || photo.sizesjson?.md || photo.sizesjson?.sm;
   const CDN_BASE = process.env.NEXT_PUBLIC_CDN_BASE_URL || '/mock-cdn';
   const unopt = CDN_BASE.startsWith('/');
 

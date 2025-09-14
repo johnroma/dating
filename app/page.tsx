@@ -29,7 +29,7 @@ async function Gallery() {
         <Link key={p.id} href={`/p/${p.id}`} className='block'>
           <div className='relative overflow-hidden rounded'>
             <Image
-              src={p.sizesJson?.sm || `${CDN_BASE}/${p.id}/sm.webp`}
+              src={p.sizesjson?.sm || `${CDN_BASE}/${p.id}/sm.webp`}
               alt={p.id}
               width={512}
               height={384}

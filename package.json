@@ -1,11 +1,12 @@
 {
   "name": "dating",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:vercel": "pnpm build",
     "start": "next start",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "lint:fix": "eslint . --ext .js,.jsx,.ts,.tsx --fix",
@@ -17,20 +18,24 @@
     "db:seed": "tsx src/lib/db/seed.ts",
     "db:open": "sqlite3 ${DATABASE_FILE:-.data/db/dev.db}",
     "test:sandbox": "MOCK_NATIVE=1 vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepare": "husky"
   },
   "dependencies": {
+    "lightningcss": "^1.30.1",
     "@aws-sdk/client-s3": "^3.676.0",
     "@aws-sdk/s3-request-presigner": "^3.888.0",
-    "better-sqlite3": "^12.2.0",
     "mime": "^4.0.4",
     "next": "latest",
     "npm-check-updates": "^18.1.1",
     "pg": "^8.16.3",
     "react": "latest",
     "react-dom": "latest",
-    "sharp": "^0.33.4",
+    "sharp": "^0.34.3",
     "uuid": "^9.0.1"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^12.2.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.1.0",
@@ -57,6 +62,7 @@
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.0",
     "eslint-plugin-sql": "^3.2.2",
+    "husky": "^9.1.7",
     "jsdom": "latest",
     "postcss": "latest",
     "prettier": "^3.6.2",
@@ -75,6 +81,9 @@
       "@tailwindcss/oxide",
       "esbuild",
       "multiline-ts"
-    ]
+    ],
+    "overrides": {
+      "@img/sharp-libvips-darwin-arm64": "1.2.0"
+    }
   }
 }
