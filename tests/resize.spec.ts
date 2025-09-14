@@ -12,7 +12,12 @@ const PHOTO_ID = `t-${Date.now()}`;
 
 async function makeTinyPng() {
   return await sharp({
-    create: { width: 2, height: 2, channels: 3, background: { r: 255, g: 0, b: 0 } },
+    create: {
+      width: 2,
+      height: 2,
+      channels: 3,
+      background: { r: 255, g: 0, b: 0 },
+    },
   })
     .png()
     .toBuffer();
@@ -35,12 +40,20 @@ afterAll(() => {
 
 it('creates webp variants and strips exif', async () => {
   const origAbs = path.join(process.cwd(), ORIG, 'tiny.png');
-  const { sizesJson } = await makeVariants({ photoId: PHOTO_ID, origAbsPath: origAbs });
+  const { sizesJson } = await makeVariants({
+    photoId: PHOTO_ID,
+    origAbsPath: origAbs,
+  });
 
   const paths = ['sm', 'md', 'lg'].map(size => {
     const p = sizesJson[size];
-    expect(p).toMatch(new RegExp(`${PHOTO_ID}/${size}\.webp$`));
-    const abs = path.join(process.cwd(), '.data/storage/photos-cdn', PHOTO_ID, `${size}.webp`);
+    expect(p).toMatch(new RegExp(`${PHOTO_ID}/${size}\\.webp$`));
+    const abs = path.join(
+      process.cwd(),
+      '.data/storage/photos-cdn',
+      PHOTO_ID,
+      `${size}.webp`
+    );
     expect(fs.existsSync(abs)).toBe(true);
     const b = fs.readFileSync(abs);
     // RIFF....WEBP header

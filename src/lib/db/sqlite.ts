@@ -26,24 +26,39 @@ function getConn() {
       sizesJson TEXT NOT NULL,
       width INTEGER,
       height INTEGER,
-      createdAt TEXT NOT NULL
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT,
+      rejectionReason TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_photo_status_created ON Photo(status, createdAt DESC);
   `);
+  // Idempotent ALTERs (older DBs may lack the new columns)
+  try {
+    db.exec('ALTER TABLE Photo ADD COLUMN updatedAt TEXT');
+  } catch {
+    // already has column
+  }
+  try {
+    db.exec('ALTER TABLE Photo ADD COLUMN rejectionReason TEXT');
+  } catch {
+    // already has column
+  }
   return db;
 }
 
 const conn = getConn();
 
 const stmtInsert = conn.prepare(
-  'INSERT INTO Photo (id, status, origKey, sizesJson, width, height, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  'INSERT INTO Photo (id, status, origKey, sizesJson, width, height, createdAt, updatedAt, rejectionReason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
 );
 
 const stmtUpdateSizes = conn.prepare(
   'UPDATE Photo SET sizesJson = ?, width = ?, height = ? WHERE id = ?'
 );
 
-const stmtSetStatus = conn.prepare('UPDATE Photo SET status = ? WHERE id = ?');
+const stmtSetStatus = conn.prepare(
+  'UPDATE Photo SET status = ?, rejectionReason = COALESCE(?, rejectionReason), updatedAt = ? WHERE id = ?'
+);
 const stmtDelete = conn.prepare('DELETE FROM Photo WHERE id = ?');
 const stmtGet = conn.prepare('SELECT * FROM Photo WHERE id = ?');
 
@@ -63,6 +78,9 @@ function mapRow(row: unknown): Photo | undefined {
     width: (r['width'] as number | null | undefined) ?? null,
     height: (r['height'] as number | null | undefined) ?? null,
     createdAt: String(r['createdAt']),
+    updatedAt: (r['updatedAt'] as string | null | undefined) ?? null,
+    rejectionReason:
+      (r['rejectionReason'] as string | null | undefined) ?? null,
   };
 }
 
@@ -74,7 +92,9 @@ export const insertPhoto: DbPort['insertPhoto'] = p => {
     JSON.stringify(p.sizesJson || {}),
     p.width ?? null,
     p.height ?? null,
-    p.createdAt
+    p.createdAt,
+    p.updatedAt ?? p.createdAt,
+    p.rejectionReason ?? null
   );
 };
 
@@ -92,8 +112,9 @@ export const updatePhotoSizes: DbPort['updatePhotoSizes'] = (
   );
 };
 
-export const setStatus: DbPort['setStatus'] = (id, status) => {
-  stmtSetStatus.run(status, id);
+export const setStatus: DbPort['setStatus'] = (id, status, extras) => {
+  const now = new Date().toISOString();
+  stmtSetStatus.run(status, extras?.rejectionReason ?? null, now, id);
 };
 
 export const deletePhoto: DbPort['deletePhoto'] = id => {
@@ -123,6 +144,13 @@ export const listPending: DbPort['listPending'] = (limit = 50, offset = 0) => {
       'SELECT * FROM Photo WHERE status = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?'
     )
     .all('PENDING', limit, offset);
+  return rows.map(mapRow).filter(Boolean) as Photo[];
+};
+
+export const listRecent: DbPort['listRecent'] = (limit = 200, offset = 0) => {
+  const rows = conn
+    .prepare('SELECT * FROM Photo ORDER BY createdAt DESC LIMIT ? OFFSET ?')
+    .all(limit, offset);
   return rows.map(mapRow).filter(Boolean) as Photo[];
 };
 

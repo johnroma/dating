@@ -60,7 +60,7 @@ Purpose: Notes for future development and recurring learnings. Keep this short, 
 - API routes:
   - `POST /api/ut/upload` (nodejs, dynamic): multipart `file` (jpeg/png/webp), enforces `UPLOAD_MAX_BYTES` (default 10MB), saves original via `writeOriginal`, returns `{ key }` with `uuid.<ext>` (ext from mime type).
   - `POST /api/photos/ingest` (nodejs, dynamic): body `{ key }`, generates variants via `makeVariants`, inserts Photo row with `APPROVED` status, returns `{ id, sizes }`.
-  - `GET /mock-cdn/<photoId>/<size>.webp`: streams variant with `Cache-Control: public, max-age=31536000, immutable`.
+  - `GET /mock-cdn/<photoId>/<size>.webp`: streams variant. In Step 4 this is tightened to `Cache-Control: public, max-age=60, must-revalidate` to stop serving quickly after moderation changes.
 - UI:
   - `components/PhotoUploader.tsx:1` (Client) posts to upload then ingest, then `router.refresh()`.
   - `app/upload/page.tsx:1` renders `PhotoUploader`.
@@ -100,7 +100,7 @@ Purpose: Notes for future development and recurring learnings. Keep this short, 
 - **Tests**:
   - `tests/db.sqlite.spec.ts` exercises CRUD against SQLite.
   - In restricted sandboxes, run with mock: `pnpm test:sandbox` (sets `MOCK_NATIVE=1`). Local dev should use real SQLite (`pnpm test`).
-- **Switching to Postgres**:
+  - **Switching to Postgres**:
   - Set `DB_DRIVER=postgres` and `DATABASE_URL=…` (Supabase connection string). Call sites do not change.
 
 **Common Errors & Fixes**
@@ -110,3 +110,18 @@ Purpose: Notes for future development and recurring learnings. Keep this short, 
   - Fix: Accept `searchParams` as a Promise and `await` it before accessing properties.
 - TypeScript: `cookies()` types don’t allow sync `.get/.set`.
   - Fix: make cookie helpers async and `await cookies()` before using `.get/.set`.
+
+## Moderation & Originals (Step 4)
+
+- Auto-approve on ingest: `/api/photos/ingest` inserts rows with `status='APPROVED'` and generates WebP variants with sharp (metadata stripped by default for WebP).
+- Moderator actions (server actions in `app/moderate/actions.ts:1`):
+  - `rejectPhoto(id, reason?)` → sets `status='REJECTED'`, stores optional `rejectionReason`, updates `updatedAt`, revalidates `/` and `/moderate`.
+  - `restorePhoto(id)` → sets `status='APPROVED'`, clears `rejectionReason`, updates `updatedAt`, revalidates.
+- Secure original route: `app/mod/original/[id]/route.ts:1` serves the original file (unaltered, EXIF intact) to moderators only with `Cache-Control: private, no-store` and proper content type by extension.
+- Public CDN enforcement: `app/mock-cdn/[...path]/route.ts:1` checks DB and serves only when `status='APPROVED'`. Cache header: `public, max-age=60, must-revalidate` to reduce staleness after rejection.
+- DB/Port updates:
+  - Columns `updatedAt` and `rejectionReason` added (idempotent ALTERs in SQLite, IF NOT EXISTS in Postgres).
+  - `setStatus(id, status, extras?: { rejectionReason?: string | null })` updates status, reason (when provided), and `updatedAt`.
+  - Added `listRecent(limit?, offset?)` to power `/moderate` view.
+- UI: `app/moderate/page.tsx:1` lists recent photos with status badges, Reject/Restore, and “Inspect original” link.
+- Tests: `tests/moderation.flow.spec.ts:1` covers approval → CDN OK → reject → CDN 403 → original 200 (as moderator) → restore → CDN OK.

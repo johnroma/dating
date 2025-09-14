@@ -19,10 +19,7 @@ export function origPath(key: string): string {
   return path.join(process.cwd(), ORIG, key);
 }
 
-export function variantPath(
-  photoId: string,
-  size: 'sm' | 'md' | 'lg'
-): string {
+export function variantPath(photoId: string, size: 'sm' | 'md' | 'lg'): string {
   return path.join(process.cwd(), CDN, photoId, `${size}.webp`);
 }
 
@@ -51,4 +48,3 @@ export function readStream(absPath: string): Readable {
 export function exists(absPath: string): boolean {
   return fs.existsSync(absPath);
 }
-

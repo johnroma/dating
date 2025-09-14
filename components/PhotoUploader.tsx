@@ -1,7 +1,7 @@
 'use client';
 
-import * as React from 'react';
 import { useRouter } from 'next/navigation';
+import * as React from 'react';
 
 export default function PhotoUploader() {
   const [file, setFile] = React.useState<File | null>(null);
@@ -35,8 +35,9 @@ export default function PhotoUploader() {
 
       setFile(null);
       router.refresh();
-    } catch (err: any) {
-      setError(String(err?.message || err || 'Unknown error'));
+    } catch (err: unknown) {
+      const m = err instanceof Error ? err.message : String(err);
+      setError(m || 'Unknown error');
     } finally {
       setLoading(false);
     }
@@ -60,4 +61,3 @@ export default function PhotoUploader() {
     </form>
   );
 }
-

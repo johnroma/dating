@@ -21,7 +21,12 @@ afterAll(() => {
 async function buildTinyPngBlob(): Promise<Blob> {
   const sharp = (await import('sharp')).default;
   const buf = await sharp({
-    create: { width: 2, height: 2, channels: 3, background: { r: 0, g: 255, b: 0 } },
+    create: {
+      width: 2,
+      height: 2,
+      channels: 3,
+      background: { r: 0, g: 255, b: 0 },
+    },
   })
     .png()
     .toBuffer();
@@ -33,7 +38,9 @@ it('upload then ingest creates files and DB row', async () => {
   const { POST: ingest } = await import('../app/api/photos/ingest/route');
   const fd = new FormData();
   fd.set('file', await buildTinyPngBlob(), 'tiny.png');
-  const upRes = await upload(new Request('http://localhost/api/ut/upload', { method: 'POST', body: fd }));
+  const upRes = await upload(
+    new Request('http://localhost/api/ut/upload', { method: 'POST', body: fd })
+  );
   const upJson = await upRes.json();
   expect(upJson.key).toBeTruthy();
   const origAbs = path.join(process.cwd(), ORIG, upJson.key);
