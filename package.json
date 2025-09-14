@@ -13,7 +13,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:migrate": "tsx src/lib/db/migrate.ts",
+    "db:migrate": "node -e \"console.log('SQLite/PG schema ensured on import (Step 7)')\"",
     "db:seed": "tsx src/lib/db/seed.ts",
     "db:open": "sqlite3 ${DATABASE_FILE:-.data/db/dev.db}",
     "test:sandbox": "MOCK_NATIVE=1 vitest run",

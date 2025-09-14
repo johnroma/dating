@@ -5,7 +5,10 @@ export * from './port';
 export { getDb };
 
 import type { DbPort } from './port';
-type AdapterModule = typeof import('./sqlite');
+type AdapterModule = typeof import('./sqlite') & {
+  softDeletePhoto?: (id: string) => void | Promise<void>;
+  restorePhoto?: (id: string) => void | Promise<void>;
+};
 
 let cached: Promise<AdapterModule> | null = null;
 function load(): Promise<AdapterModule> {
@@ -26,6 +29,14 @@ function getDb(): DbPort {
     setStatus: async (id, status, extras) =>
       (await load()).setStatus(id, status, extras),
     deletePhoto: async id => (await load()).deletePhoto(id),
+    softDeletePhoto: async id => {
+      const mod = await load();
+      return mod.softDeletePhoto?.(id);
+    },
+    restorePhoto: async id => {
+      const mod = await load();
+      return mod.restorePhoto?.(id);
+    },
     getPhoto: async id => (await load()).getPhoto(id),
     getByOrigKey: async origKey => (await load()).getByOrigKey(origKey),
     listApproved: async (limit, offset) =>

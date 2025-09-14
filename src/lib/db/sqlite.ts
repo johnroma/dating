@@ -55,26 +55,64 @@ function getConn() {
   } catch {
     // Column already exists
   }
+  try {
+    db.exec('ALTER TABLE Photo ADD COLUMN deletedAt TEXT');
+  } catch {
+    // Column already exists
+  }
+
+  // Step 7 auxiliary tables
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS IngestKeys(
+      id TEXT PRIMARY KEY,
+      photoId TEXT NOT NULL,
+      createdAt TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS AuditLog(
+      id TEXT PRIMARY KEY,
+      photoId TEXT NOT NULL,
+      action TEXT NOT NULL,
+      actor TEXT NOT NULL,
+      reason TEXT,
+      at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_photo_deleted ON Photo(deletedAt);
+  `);
   return db;
 }
 
 const conn = getConn();
 
 const stmtInsert = conn.prepare(
-  'INSERT INTO Photo (id, status, origKey, sizesJson, width, height, createdAt, updatedAt, rejectionReason, pHash, duplicateOf) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  'INSERT INTO Photo (id, status, origKey, sizesJson, width, height, createdAt, updatedAt, rejectionReason, pHash, duplicateOf, deletedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
 );
 
 const stmtUpdateSizes = conn.prepare(
-  'UPDATE Photo SET sizesJson = ?, width = ?, height = ? WHERE id = ?'
+  'UPDATE Photo SET sizesJson = ?, width = ?, height = ?, updatedAt = ? WHERE id = ?'
 );
 
 const stmtSetStatus = conn.prepare(
   'UPDATE Photo SET status = ?, rejectionReason = COALESCE(?, rejectionReason), updatedAt = ? WHERE id = ?'
 );
+const stmtSoftDelete = conn.prepare(
+  'UPDATE Photo SET deletedAt = ?, updatedAt = ? WHERE id = ?'
+);
+const stmtRestore = conn.prepare(
+  'UPDATE Photo SET deletedAt = NULL, updatedAt = ? WHERE id = ?'
+);
 const stmtDelete = conn.prepare('DELETE FROM Photo WHERE id = ?');
 const stmtGet = conn.prepare('SELECT * FROM Photo WHERE id = ?');
 const stmtGetByOrig = conn.prepare(
   'SELECT * FROM Photo WHERE origKey = ? LIMIT 1'
+);
+const stmtUpsertIngestKey = conn.prepare(
+  'INSERT INTO IngestKeys(id, photoId, createdAt) VALUES (?, ?, ?) ON CONFLICT(id) DO NOTHING'
+);
+const stmtGetIngestKey = conn.prepare(
+  'SELECT photoId FROM IngestKeys WHERE id = ?'
+);
+const stmtInsertAudit = conn.prepare(
+  'INSERT INTO AuditLog(id, photoId, action, actor, reason, at) VALUES(?, ?, ?, ?, ?, ?)'
 );
 
 function mapRow(row: unknown): Photo | undefined {
@@ -98,6 +136,7 @@ function mapRow(row: unknown): Photo | undefined {
     duplicateOf: (r['duplicateOf'] as string | null | undefined) ?? null,
     rejectionReason:
       (r['rejectionReason'] as string | null | undefined) ?? null,
+    deletedAt: (r['deletedAt'] as string | null | undefined) ?? null,
   };
 }
 
@@ -113,7 +152,8 @@ export const insertPhoto: DbPort['insertPhoto'] = p => {
     p.updatedAt ?? p.createdAt,
     p.rejectionReason ?? null,
     p.pHash ?? null,
-    p.duplicateOf ?? null
+    p.duplicateOf ?? null,
+    p.deletedAt ?? null
   );
 };
 
@@ -127,6 +167,7 @@ export const updatePhotoSizes: DbPort['updatePhotoSizes'] = (
     JSON.stringify(sizesJson || {}),
     width ?? null,
     height ?? null,
+    new Date().toISOString(),
     id
   );
 };
@@ -140,6 +181,16 @@ export const deletePhoto: DbPort['deletePhoto'] = id => {
   stmtDelete.run(id);
 };
 
+export const softDeletePhoto: NonNullable<DbPort['softDeletePhoto']> = id => {
+  const now = new Date().toISOString();
+  stmtSoftDelete.run(now, now, id);
+};
+
+export const restorePhoto: NonNullable<DbPort['restorePhoto']> = id => {
+  const now = new Date().toISOString();
+  stmtRestore.run(now, id);
+};
+
 export const getPhoto: DbPort['getPhoto'] = id => {
   const row = stmtGet.get(id);
   return mapRow(row);
@@ -149,6 +200,35 @@ export const getByOrigKey: DbPort['getByOrigKey'] = origKey => {
   const row = stmtGetByOrig.get(origKey);
   return mapRow(row);
 };
+
+// Step 7 helpers (not in DbPort on purpose; import directly when needed)
+export function upsertIngestKey(
+  id: string,
+  photoId: string
+): 'created' | 'exists' {
+  const row = stmtGetIngestKey.get(id) as { photoId: string } | undefined;
+  if (row?.photoId) return 'exists';
+  stmtUpsertIngestKey.run(id, photoId, new Date().toISOString());
+  return 'created';
+}
+
+export function insertAudit(a: {
+  id: string;
+  photoId: string;
+  action: string;
+  actor: string;
+  reason?: string | null;
+  at: string;
+}) {
+  stmtInsertAudit.run(
+    a.id,
+    a.photoId,
+    a.action,
+    a.actor,
+    a.reason ?? null,
+    a.at
+  );
+}
 
 export const listApproved: DbPort['listApproved'] = (
   limit = 50,

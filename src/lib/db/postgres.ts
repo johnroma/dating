@@ -20,13 +20,29 @@ const init = (async () => {
       "pHash" TEXT,
       "duplicateOf" TEXT,
       "updatedAt" TIMESTAMPTZ,
-      "rejectionReason" TEXT
+      "rejectionReason" TEXT,
+      "deletedAt" TIMESTAMPTZ
     );
     ALTER TABLE "Photo" ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMPTZ;
     ALTER TABLE "Photo" ADD COLUMN IF NOT EXISTS "rejectionReason" TEXT;
     ALTER TABLE "Photo" ADD COLUMN IF NOT EXISTS "pHash" TEXT;
     ALTER TABLE "Photo" ADD COLUMN IF NOT EXISTS "duplicateOf" TEXT;
+    ALTER TABLE "Photo" ADD COLUMN IF NOT EXISTS "deletedAt" TIMESTAMPTZ;
+    CREATE TABLE IF NOT EXISTS "IngestKeys"(
+      id TEXT PRIMARY KEY,
+      photoId TEXT NOT NULL,
+      createdAt TIMESTAMPTZ NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS "AuditLog"(
+      id TEXT PRIMARY KEY,
+      photoId TEXT NOT NULL,
+      action TEXT NOT NULL,
+      actor TEXT NOT NULL,
+      reason TEXT,
+      at TIMESTAMPTZ NOT NULL
+    );
     CREATE INDEX IF NOT EXISTS photo_status_created ON "Photo"(status, "createdAt" DESC);
+    CREATE INDEX IF NOT EXISTS photo_deleted ON "Photo"("deletedAt");
   `);
 })();
 
@@ -64,6 +80,10 @@ function rowToPhoto(row: Record<string, unknown>): Photo {
       (row['rejectionReason'] ?? row['rejectionreason'])
         ? String(row['rejectionReason'] ?? row['rejectionreason'])
         : null,
+    deletedAt:
+      (row['deletedAt'] ?? row['deletedat'])
+        ? new Date(String(row['deletedAt'] ?? row['deletedat'])).toISOString()
+        : null,
   };
 }
 
@@ -96,8 +116,14 @@ export const updatePhotoSizes: DbPort['updatePhotoSizes'] = async (
 ) => {
   await init;
   await pool.query(
-    'UPDATE "Photo" SET sizesJson = $1, width = $2, height = $3 WHERE id = $4',
-    [JSON.stringify(sizesJson || {}), width ?? null, height ?? null, id]
+    'UPDATE "Photo" SET sizesJson = $1, width = $2, height = $3, "updatedAt" = $4 WHERE id = $5',
+    [
+      JSON.stringify(sizesJson || {}),
+      width ?? null,
+      height ?? null,
+      new Date().toISOString(),
+      id,
+    ]
   );
 };
 
@@ -113,6 +139,24 @@ export const setStatus: DbPort['setStatus'] = async (id, status, extras) => {
 export const deletePhoto: DbPort['deletePhoto'] = async id => {
   await init;
   await pool.query('DELETE FROM "Photo" WHERE id = $1', [id]);
+};
+
+export const softDeletePhoto: NonNullable<
+  DbPort['softDeletePhoto']
+> = async id => {
+  await init;
+  await pool.query(
+    'UPDATE "Photo" SET "deletedAt" = now(), "updatedAt" = now() WHERE id = $1',
+    [id]
+  );
+};
+
+export const restorePhoto: NonNullable<DbPort['restorePhoto']> = async id => {
+  await init;
+  await pool.query(
+    'UPDATE "Photo" SET "deletedAt" = NULL, "updatedAt" = now() WHERE id = $1',
+    [id]
+  );
 };
 
 export const getPhoto: DbPort['getPhoto'] = async id => {
@@ -178,6 +222,34 @@ export const countApproved: DbPort['countApproved'] = async () => {
   );
   return Number(rows[0]?.c ?? 0);
 };
+
+// Step 7 helpers (not in DbPort on purpose; import directly where needed)
+export async function upsertIngestKey(
+  id: string,
+  photoId: string
+): Promise<'created' | 'exists'> {
+  await init;
+  const r = await pool.query(
+    'INSERT INTO "IngestKeys"(id, photoId, createdAt) VALUES($1,$2, now()) ON CONFLICT(id) DO NOTHING RETURNING photoId',
+    [id, photoId]
+  );
+  return r.rowCount === 0 ? 'exists' : 'created';
+}
+
+export async function insertAudit(a: {
+  id: string;
+  photoId: string;
+  action: string;
+  actor: string;
+  reason?: string | null;
+  at: string;
+}) {
+  await init;
+  await pool.query(
+    'INSERT INTO "AuditLog"(id, photoId, action, actor, reason, at) VALUES ($1,$2,$3,$4,$5,$6)',
+    [a.id, a.photoId, a.action, a.actor, a.reason ?? null, a.at]
+  );
+}
 
 export const countPending: DbPort['countPending'] = async () => {
   await init;

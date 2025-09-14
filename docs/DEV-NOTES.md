@@ -233,3 +233,65 @@ Notes
 - Client components in tests: mock `next/navigation`’s `useRouter` in tests like `app/page.test.tsx:1` so components render without an App Router.
 - `src/lib/images/hash.ts:1` uses BigInt. Typecheck requires `tsconfig.json` `target` ≥ `es2020`, or refactor to avoid BigInt.
 - `next/font` build in restricted networks can fail fetching Google Fonts; either allow network in CI or configure local fonts/fallback.
+
+## Idempotent Ingest + Lifecycle (Step 7)
+
+Goals: make ingest idempotent, add soft delete/restore/hard delete actions with an audit trail, and introduce a minimal jobs port for future background tasks.
+
+Ingest Idempotency
+
+- Route: `app/api/photos/ingest/route.ts:1`
+  - Accepts `idempotencyKey?: string` alongside `{ key, pHash }`.
+  - Computes deterministic `photoId = sha256(idempotencyKey || 'key:'+key).slice(0,24)`.
+  - Uses `IngestKeys` table to bind `idempotencyKey → photoId` and short-circuit on repeats.
+  - If a row already exists for `origKey`, the idem key is recorded to that existing photo and returned immediately.
+  - Inserts `AuditLog` with action `INGESTED` and actor from cookie role.
+
+Deletion Lifecycle
+
+- Soft delete: `app/api/photos/[id]/soft-delete/route.ts:1` (POST)
+  - Requires `moderator` role via `getRoleFromCookies()`.
+  - Sets `Photo.deletedAt = now()` and writes `AuditLog` with `SOFT_DELETED`.
+  - CDN and Original routes refuse soft-deleted photos for everyone (including moderators).
+- Restore: `app/api/photos/[id]/restore/route.ts:1` (POST)
+  - Requires `moderator`.
+  - Clears `deletedAt` and writes `AuditLog` with `RESTORED`.
+- Hard delete: `app/api/photos/[id]/route.ts:1` (DELETE)
+  - Requires `moderator`.
+  - Calls `storage.deleteAllForPhoto(id, origKey)` and then removes the DB row.
+  - Writes `AuditLog` with `DELETED`.
+
+Public/Original Routes behavior
+
+- Public CDN: `app/mock-cdn/[...path]/route.ts:1`
+  - For viewers: only serves when `status='APPROVED'`.
+  - For moderators: may serve non-approved for review, but never serves soft-deleted (`deletedAt` set).
+  - Cache header unchanged: `public, max-age=60, must-revalidate`.
+- Moderator original: `app/mod/original/[id]/route.ts:1`
+  - Still moderator-only.
+  - Blocks soft-deleted originals (`403`).
+
+DB schema and drivers
+
+- SQLite: `src/lib/db/sqlite.ts:1`
+  - Adds idempotent `ALTER` for `Photo.deletedAt`.
+  - Ensures `IngestKeys(id, photoId, createdAt)` and `AuditLog(id, photoId, action, actor, reason, at)`.
+  - Adds helpers: `softDeletePhoto(id)`, `restorePhoto(id)`, `upsertIngestKey(id, photoId)`, `insertAudit(a)`.
+  - `updatePhotoSizes` now updates `updatedAt`.
+- Postgres: `src/lib/db/postgres.ts:1`
+  - Adds `deletedAt` to `Photo` and ensures `IngestKeys` and `AuditLog` tables.
+  - Adds the same helpers as SQLite with `TIMESTAMPTZ` columns.
+
+Jobs Port
+
+- New: `src/ports/jobs.ts:1`
+  - Minimal `JobPort` with `enqueue` and `runInline` methods.
+  - Inline no-op implementation for now; can be swapped via `_setJobsForTests` or a future adapter.
+
+Migrations and scripts
+
+- `package.json:1` `db:migrate` prints a no-op message because both drivers ensure schema on import.
+
+Testing status
+
+- All existing tests pass; R2-specific E2E remains skipped.

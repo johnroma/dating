@@ -36,7 +36,11 @@ export async function GET(
       .find(([k]) => k === COOKIE_NAME)?.[1];
     const role = parseRole(roleCookie);
     const isModerator = role === 'moderator';
-    if (!photo || (photo.status !== 'APPROVED' && !isModerator)) {
+    if (
+      !photo ||
+      photo.deletedAt ||
+      (photo.status !== 'APPROVED' && !isModerator)
+    ) {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 });
     }
   }
