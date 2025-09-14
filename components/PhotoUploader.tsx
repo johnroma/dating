@@ -24,13 +24,23 @@ export default function PhotoUploader() {
       const upJson = await upRes.json();
       if (!upRes.ok) throw new Error(upJson?.error || 'Upload failed');
       const key = upJson.key as string;
+      const pHash = upJson.pHash as string;
 
       const igRes = await fetch('/api/photos/ingest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key }),
+        body: JSON.stringify({ key, pHash }),
       });
       const igJson = await igRes.json();
+
+      // Check if this is a duplicate detection response
+      if (igJson.duplicateOf && igJson.message) {
+        setError(
+          `Duplicate image detected! This image is similar to an existing photo. ${igJson.message}`
+        );
+        return;
+      }
+
       if (!igRes.ok) throw new Error(igJson?.error || 'Ingest failed');
 
       setFile(null);

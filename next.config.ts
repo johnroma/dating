@@ -2,7 +2,7 @@ import type { NextConfig } from 'next';
 
 const config: NextConfig = (() => {
   const out: NextConfig = {};
-  const cdn = process.env.CDN_BASE_URL;
+  const cdn = process.env.CDN_BASE_URL || process.env.NEXT_PUBLIC_CDN_BASE_URL;
   if (cdn) {
     try {
       const u = new URL(cdn);
@@ -13,7 +13,7 @@ const config: NextConfig = (() => {
               (u.protocol.replace(':', '') as 'http' | 'https') || 'https',
             hostname: u.hostname,
             port: u.port || undefined,
-            pathname: '/cdn/**',
+            pathname: '/**',
           },
         ],
       };
