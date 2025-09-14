@@ -19,6 +19,87 @@ import { getStorage } from '@/src/ports/storage';
 
 const LIMIT_INGESTS = Number(process.env.RATE_INGESTS_PER_MINUTE || 60);
 
+/**
+ * Validates that generated image URLs are correct and accessible
+ */
+function validateImageUrls(
+  sizesJson: Record<string, string>,
+  photoId: string
+): string | null {
+  const expectedSizes = ['sm', 'md', 'lg'];
+  const errors: string[] = [];
+
+  for (const size of expectedSizes) {
+    const url = sizesJson[size];
+    if (!url) {
+      errors.push(`Missing URL for size: ${size}`);
+      continue;
+    }
+
+    // Check if URL is valid
+    try {
+      const parsedUrl = new URL(url);
+
+      // For R2 storage, validate the URL structure
+      const storageDriver = process.env.STORAGE_DRIVER?.split('#')[0]
+        ?.trim()
+        .toLowerCase();
+      if (storageDriver === 'r2') {
+        const cdnBase = process.env.CDN_BASE_URL;
+        if (cdnBase) {
+          const expectedBase = new URL(cdnBase);
+
+          // Check if URL starts with the correct base
+          if (parsedUrl.origin !== expectedBase.origin) {
+            errors.push(
+              `Invalid base URL for ${size}: expected ${expectedBase.origin}, got ${parsedUrl.origin}`
+            );
+            continue;
+          }
+
+          // Check if URL has the correct path structure: /cdn/{photoId}/{size}.webp
+          const expectedPath = `/cdn/${photoId}/${size}.webp`;
+          if (parsedUrl.pathname !== expectedPath) {
+            errors.push(
+              `Invalid path for ${size}: expected ${expectedPath}, got ${parsedUrl.pathname}`
+            );
+            continue;
+          }
+
+          // Additional validation: ensure the URL contains the photoId
+          if (!parsedUrl.pathname.includes(photoId)) {
+            errors.push(`URL for ${size} does not contain photoId: ${photoId}`);
+            continue;
+          }
+
+          // Ensure it's a .webp file
+          if (!parsedUrl.pathname.endsWith('.webp')) {
+            errors.push(
+              `URL for ${size} does not end with .webp: ${parsedUrl.pathname}`
+            );
+            continue;
+          }
+        }
+      }
+
+      // For local storage, validate the mock-cdn path
+      if (storageDriver === 'local' || !process.env.STORAGE_DRIVER) {
+        const expectedPath = `/mock-cdn/${photoId}/${size}.webp`;
+        if (parsedUrl.pathname !== expectedPath) {
+          errors.push(
+            `Invalid local path for ${size}: expected ${expectedPath}, got ${parsedUrl.pathname}`
+          );
+          continue;
+        }
+      }
+    } catch (error) {
+      errors.push(`Invalid URL format for ${size}: ${url} - ${error}`);
+    }
+  }
+
+  return errors.length > 0 ? errors.join('; ') : null;
+}
+
 export async function POST(req: Request) {
   // basic rate limit per IP
   const ip = ipFromHeaders(req);
@@ -116,8 +197,26 @@ export async function POST(req: Request) {
     );
   }
 
-  // optional duplicate detection (stub)
+  // Duplicate detection - prevent upload if duplicate found
   const duplicateOf = pHash ? await findDuplicateByHash(pHash) : undefined;
+
+  if (duplicateOf) {
+    console.log(
+      `Duplicate detected: photo ${duplicateOf} is similar to uploaded image`
+    );
+
+    // Get the existing photo details
+    const existingPhoto = await db.getPhoto(duplicateOf);
+    if (existingPhoto) {
+      return NextResponse.json({
+        id: existingPhoto.id,
+        status: existingPhoto.status,
+        sizes: existingPhoto.sizesJson,
+        duplicateOf: duplicateOf,
+        message: 'Duplicate image detected - returning existing photo',
+      });
+    }
+  }
 
   const storage = getStorage();
   const photoId = candidateId; // deterministic id for idempotency
@@ -172,6 +271,28 @@ export async function POST(req: Request) {
     md: await storage.putVariant(photoId, 'md', mdBuf),
     lg: await storage.putVariant(photoId, 'lg', lgBuf),
   } as Record<string, string>;
+
+  // Validate generated URLs before storing in database
+  const validationError = validateImageUrls(sizesJson, photoId);
+  if (validationError) {
+    console.error('URL validation failed:', validationError);
+
+    // Clean up uploaded files since validation failed
+    try {
+      await storage.deleteAllForPhoto(photoId, key);
+      console.log('Cleaned up uploaded files after validation failure');
+    } catch (cleanupError) {
+      console.error('Failed to cleanup uploaded files:', cleanupError);
+    }
+
+    return Response.json(
+      {
+        error: 'Failed to generate valid image URLs',
+        details: validationError,
+      },
+      { status: 500 }
+    );
+  }
 
   await db.insertPhoto({
     id: photoId,
