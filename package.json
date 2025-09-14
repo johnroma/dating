@@ -56,6 +56,7 @@
     "eslint-plugin-react": "^7.34.0",
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.0",
+    "eslint-plugin-sql": "^3.2.2",
     "jsdom": "latest",
     "postcss": "latest",
     "prettier": "^3.6.2",
@@ -64,7 +65,7 @@
     "typescript": "latest",
     "vitest": "latest"
   },
-  "packageManager": "pnpm@10.16.0",
+  "packageManager": "pnpm@10.16.1+sha512.0e155aa2629db8672b49e8475da6226aa4bdea85fdcdfdc15350874946d4f3c91faaf64cbdc4a5d1ab8002f473d5c3fcedcd197989cf0390f9badd3c04678706",
   "pnpm": {
     "onlyBuiltDependencies": [
       "better-sqlite3",
@@ -72,7 +73,8 @@
     ],
     "ignoredBuiltDependencies": [
       "@tailwindcss/oxide",
-      "esbuild"
+      "esbuild",
+      "multiline-ts"
     ]
   }
 }

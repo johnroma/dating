@@ -9,6 +9,7 @@ import prettier from 'eslint-plugin-prettier';
 import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
+import sql from 'eslint-plugin-sql';
 
 const compat = new FlatCompat({ baseDirectory: process.cwd() });
 
@@ -197,9 +198,63 @@ const config = [
   // Database files
   {
     files: ['src/lib/db/**/*.{js,ts}'],
+    plugins: {
+      sql,
+    },
+    languageOptions: {
+      parser: typescriptParser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+      },
+    },
     rules: {
       'no-console': 'off',
       '@typescript-eslint/no-require-imports': 'off',
+
+      // SQL formatting with identifier case enforcement
+      'sql/format': [
+        'error',
+        {
+          ignoreExpressions: false,
+          ignoreInline: true,
+          // Lint plain string SQL in db modules
+          ignoreTagless: false,
+        },
+        {
+          identifierCase: 'lower',
+          keywordCase: 'upper',
+          dataTypeCase: 'upper',
+        },
+      ],
+      'sql/no-unsafe-query': [
+        'error',
+        {
+          allowLiteral: false,
+        },
+      ],
+
+      // Forbid quoted identifiers in SQL strings (prefer unquoted lowercase)
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'CallExpression[callee.property.name="query"][arguments.0.type="Literal"][arguments.0.value=/\\"[A-Za-z_][A-Za-z0-9_]*\\"/]',
+          message:
+            'Avoid quoted identifiers in SQL. Use unquoted, lowercase names (e.g., origkey or snake_case).',
+        },
+        {
+          selector:
+            'CallExpression[callee.property.name="query"][arguments.0.type="TemplateLiteral"][arguments.0.quasis.0.value.raw=/\\"[A-Za-z_][A-Za-z0-9_]*\\"/]',
+          message:
+            'Avoid quoted identifiers in SQL. Use unquoted, lowercase names (e.g., origkey or snake_case).',
+        },
+      ],
+    },
+    settings: {
+      sql: {
+        placeholderRule: '\\$\\d+',
+      },
     },
   },
 

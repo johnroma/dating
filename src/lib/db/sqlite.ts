@@ -19,20 +19,20 @@ function getConn() {
   db = new Database(file);
   db.pragma('journal_mode = WAL');
   db.exec(`
-    CREATE TABLE IF NOT EXISTS Photo(
-      id TEXT PRIMARY KEY,
-      status TEXT NOT NULL,
-      origKey TEXT NOT NULL,
-      sizesJson TEXT NOT NULL,
-      width INTEGER,
-      height INTEGER,
-      createdAt TEXT NOT NULL,
-      pHash TEXT,
-      duplicateOf TEXT,
-      updatedAt TEXT,
-      rejectionReason TEXT
+    CREATE TABLE IF NOT EXISTS "Photo"(
+      "id" "TEXT" PRIMARY KEY,
+      "status" "TEXT" NOT NULL,
+      "origKey" "TEXT" NOT NULL,
+      "sizesJson" "TEXT" NOT NULL,
+      "width" "INTEGER",
+      "height" "INTEGER",
+      "createdAt" "TEXT" NOT NULL,
+      "pHash" "TEXT",
+      "duplicateOf" "TEXT",
+      "updatedAt" "TEXT",
+      "rejectionReason" "TEXT"
     );
-    CREATE INDEX IF NOT EXISTS idx_photo_status_created ON Photo(status, createdAt DESC);
+    CREATE INDEX IF NOT EXISTS "idx_photo_status_created" ON "Photo"("status", "createdAt" DESC);
   `);
   // Idempotent ALTERs (older DBs may lack the new columns)
   try {
@@ -63,20 +63,20 @@ function getConn() {
 
   // Step 7 auxiliary tables
   db.exec(`
-    CREATE TABLE IF NOT EXISTS IngestKeys(
-      id TEXT PRIMARY KEY,
-      photoId TEXT NOT NULL,
-      createdAt TEXT NOT NULL
+    CREATE TABLE IF NOT EXISTS "IngestKeys"(
+      "id" "TEXT" PRIMARY KEY,
+      "photoId" "TEXT" NOT NULL,
+      "createdAt" "TEXT" NOT NULL
     );
-    CREATE TABLE IF NOT EXISTS AuditLog(
-      id TEXT PRIMARY KEY,
-      photoId TEXT NOT NULL,
-      action TEXT NOT NULL,
-      actor TEXT NOT NULL,
-      reason TEXT,
-      at TEXT NOT NULL
+    CREATE TABLE IF NOT EXISTS "AuditLog"(
+      "id" "TEXT" PRIMARY KEY,
+      "photoId" "TEXT" NOT NULL,
+      "action" "TEXT" NOT NULL,
+      "actor" "TEXT" NOT NULL,
+      "reason" "TEXT",
+      "at" "TEXT" NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS idx_photo_deleted ON Photo(deletedAt);
+    CREATE INDEX IF NOT EXISTS "idx_photo_deleted" ON "Photo"("deletedAt");
   `);
   return db;
 }

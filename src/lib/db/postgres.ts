@@ -171,7 +171,7 @@ export const getPhoto: DbPort['getPhoto'] = async id => {
 export const getByOrigKey: DbPort['getByOrigKey'] = async origKey => {
   await init;
   const { rows } = await pool.query(
-    'SELECT * FROM "Photo" WHERE "origKey" = $1 LIMIT 1',
+    'SELECT * FROM "Photo" WHERE origKey = $1 LIMIT 1',
     [origKey]
   );
   if (!rows[0]) return undefined;
