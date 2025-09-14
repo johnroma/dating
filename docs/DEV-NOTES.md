@@ -125,3 +125,68 @@ Purpose: Notes for future development and recurring learnings. Keep this short, 
   - Added `listRecent(limit?, offset?)` to power `/moderate` view.
 - UI: `app/moderate/page.tsx:1` lists recent photos with status badges, Reject/Restore, and “Inspect original” link.
 - Tests: `tests/moderation.flow.spec.ts:1` covers approval → CDN OK → reject → CDN 403 → original 200 (as moderator) → restore → CDN OK.
+
+## Cloud Storage + Presigned Originals (Step 5)
+
+Goal: keep UploadThing-style `/api/ut/upload` (multipart) writing originals locally, then on ingest write variants via a storage driver and, when using R2/S3, upload the original and serve a presigned URL to moderators.
+
+Storage port and adapters
+
+- Port: `src/ports/storage.ts:1`
+  - `putOriginal(key, buf)`, `putVariant(photoId, size, buf): Promise<string>`, `getOriginalPresignedUrl(key)`, `deleteAllForPhoto(photoId, origKey)`, `variantsBaseUrl()`.
+  - `getStorage()` lazily loads the selected adapter based on `STORAGE_DRIVER`.
+- Local adapter: `src/adapters/storage/local.ts:1`
+  - Uses `src/lib/storage/fs.ts` under `.data/storage/`.
+  - `putVariant` returns `${NEXT_PUBLIC_CDN_BASE_URL || '/mock-cdn'}/${photoId}/${size}.webp`.
+- R2/S3 adapter: `src/adapters/storage/r2.ts:1`
+  - Uses `@aws-sdk/client-s3` and `@aws-sdk/s3-request-presigner`.
+  - Keys: original `orig/<key>` to `S3_BUCKET_ORIG`; variants `cdn/<photoId>/<size>.webp` to `S3_BUCKET_CDN`.
+  - Variant URL: `${CDN_BASE_URL}/cdn/${photoId}/${size}.webp`.
+  - Presign originals with `getSignedUrl(GetObject, { expiresIn: PRESIGN_TTL_SECONDS })`.
+
+Ingest changes
+
+- `app/api/photos/ingest/route.ts:1`
+  - Reads local original path from `origPath(key)`.
+  - If `STORAGE_DRIVER='r2'`, uploads the original via `storage.putOriginal(key, buf)` (local copy can be optionally removed later).
+  - Generates three WebP variant buffers with sharp and uploads each via `storage.putVariant`, building `sizesJson` from adapter URLs.
+  - Inserts DB row unchanged (sizesJson now contains full URLs for R2).
+
+Moderator “Inspect original”
+
+- `app/mod/original/[id]/route.ts:1`
+  - Local: streams file with `Cache-Control: private, no-store`.
+  - R2: 302 redirect to `storage.getOriginalPresignedUrl(photo.origKey)`.
+
+Public CDN route
+
+- `app/mock-cdn/[...path]/route.ts:1`
+  - Local: serves from disk; only APPROVED for viewers. Moderators may fetch non-approved for review.
+  - R2: returns 410 Gone to catch wrong links in QA (UI should use CDN URLs returned by adapter).
+
+UI adjustments
+
+- `app/page.tsx:1`
+  - Adds `PhotoUploader` to the homepage.
+  - Gallery: role-aware listing (`listRecent` for moderators with status badges; `listApproved` for viewers).
+  - Next/Image uses intrinsic sizing for grid tiles to avoid `fill`/height 0 warnings; `unoptimized` in local `/mock-cdn` mode.
+  - `export const dynamic = 'force-dynamic'` and `noStore()` to show new uploads immediately.
+- `app/p/[id]/page.tsx:1`: photo detail view (lg→md→sm), shows moderator-only “Inspect original”.
+- `next.config.ts:1`: sets `images.remotePatterns` from `CDN_BASE_URL` for production optimization of CDN-hosted variants.
+
+Env and packages
+
+- `.env.example:1` additions:
+  - `STORAGE_DRIVER=local | r2`
+  - R2/S3: `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET_ORIG`, `S3_BUCKET_CDN`, `CDN_BASE_URL`, `PRESIGN_TTL_SECONDS`.
+- `package.json:1` adds `@aws-sdk/client-s3` and `@aws-sdk/s3-request-presigner`.
+
+Testing
+
+- Local driver integrations are unchanged (existing tests pass).
+- Optional: unit for R2 key/URL shaping (no network). Optional conditional E2E when R2 creds present.
+
+Notes
+
+- All local data stays under `.data/` (ignored by Git).
+- When switching to R2 in prod, ensure `CDN_BASE_URL` is set and reachable so Next/Image can optimize remote images.
