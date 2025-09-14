@@ -28,6 +28,23 @@ const config: NextConfig = (() => {
       // ignore invalid URL
     }
   }
+  // Ensure optional native modules are treated as externals when not referenced.
+  // This helps avoid accidentally bundling them into API functions.
+  out.webpack = (config, { isServer }) => {
+    if (isServer) {
+      (config.externals || (config.externals = [])).push(
+        (
+          { request }: { request?: string },
+          cb: (err: Error | null, result?: string) => void
+        ) => {
+          if (request === 'better-sqlite3')
+            return cb(null, 'commonjs better-sqlite3');
+          return cb(null);
+        }
+      );
+    }
+    return config;
+  };
   return out;
 })();
 

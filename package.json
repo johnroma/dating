@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:vercel": "pnpm build",
     "start": "next start",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
     "lint:fix": "eslint . --ext .js,.jsx,.ts,.tsx --fix",
@@ -23,7 +24,6 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.676.0",
     "@aws-sdk/s3-request-presigner": "^3.888.0",
-    "better-sqlite3": "^12.2.0",
     "mime": "^4.0.4",
     "next": "latest",
     "npm-check-updates": "^18.1.1",
@@ -32,6 +32,9 @@
     "react-dom": "latest",
     "sharp": "^0.34.3",
     "uuid": "^9.0.1"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^12.2.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.1.0",

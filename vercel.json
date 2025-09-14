@@ -1,0 +1,7 @@
+{
+  "installCommand": "pnpm install --frozen-lockfile --no-optional",
+  "buildCommand": "pnpm build",
+  "functions": {
+    "api/**": { "memory": 1024, "maxDuration": 60 }
+  }
+}

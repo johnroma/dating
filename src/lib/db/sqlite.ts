@@ -6,6 +6,16 @@ import Database from 'better-sqlite3';
 import type { DbPort } from './port';
 import type { Photo, PhotoStatus } from './types';
 
+// On Vercel builds, prevent accidental import of sqlite adapter when not selected
+if (
+  process.env.VERCEL &&
+  (process.env.DB_DRIVER || '').toLowerCase() !== 'sqlite'
+) {
+  throw new Error(
+    'sqlite.ts should not be imported on Vercel when DB_DRIVER!=sqlite'
+  );
+}
+
 let db: InstanceType<typeof Database> | null = null;
 
 function getConn() {
