@@ -5,9 +5,9 @@ import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 // At build time, Next inlines process.env.*; the unused branch is dead-code-eliminated.
-export const runtime = (
-  (process.env.STORAGE_DRIVER || 'local') === 'local' ? 'nodejs' : 'edge'
-) as 'nodejs' | 'edge';
+// Note: Next requires segment config to be static. Use Node runtime
+// and short‑circuit to 410 in prod so heavy deps are never used.
+export const runtime = 'nodejs';
 
 export async function GET(
   _req: Request,
