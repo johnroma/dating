@@ -72,8 +72,8 @@ export async function POST(req: Request) {
     return NextResponse.json({
       id: existing.id,
       status: existing.status,
-      sizes: existing.sizesJson,
-      duplicateOf: existing.duplicateOf ?? null,
+      sizes: existing.sizesjson,
+      duplicateOf: existing.duplicateof ?? null,
     });
   }
 
@@ -94,8 +94,8 @@ export async function POST(req: Request) {
         return NextResponse.json({
           id: prev.id,
           status: prev.status,
-          sizes: prev.sizesJson,
-          duplicateOf: prev.duplicateOf ?? null,
+          sizes: prev.sizesjson,
+          duplicateOf: prev.duplicateof ?? null,
         });
       }
     }
@@ -167,7 +167,7 @@ export async function POST(req: Request) {
     .webp({ quality: 75 })
     .toBuffer();
 
-  const sizesJson = {
+  const sizesjson = {
     sm: await storage.putVariant(photoId, 'sm', smBuf),
     md: await storage.putVariant(photoId, 'md', mdBuf),
     lg: await storage.putVariant(photoId, 'lg', lgBuf),
@@ -176,13 +176,13 @@ export async function POST(req: Request) {
   await db.insertPhoto({
     id: photoId,
     status: 'APPROVED',
-    origKey: key,
-    sizesJson,
+    origkey: key,
+    sizesjson,
     width,
     height,
-    createdAt: new Date().toISOString(),
-    pHash: pHash || null,
-    duplicateOf: duplicateOf || null,
+    createdat: new Date().toISOString(),
+    phash: pHash || null,
+    duplicateof: duplicateOf || null,
   });
 
   // Audit
@@ -190,7 +190,7 @@ export async function POST(req: Request) {
     const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
     const a = {
       id: crypto.randomUUID(),
-      photoId,
+      photoid: photoId,
       action: 'INGESTED',
       actor: String(role),
       reason: null as string | null,
@@ -210,7 +210,7 @@ export async function POST(req: Request) {
   return NextResponse.json({
     id: photoId,
     status: 'APPROVED',
-    sizes: sizesJson,
+    sizes: sizesjson,
     duplicateOf: duplicateOf || null,
   });
 }

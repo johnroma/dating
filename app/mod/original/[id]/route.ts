@@ -21,22 +21,22 @@ export async function GET(
   const { id } = await params;
   const photo = await db.getPhoto(id);
   if (!photo) return NextResponse.json({ error: 'not found' }, { status: 404 });
-  if (photo.deletedAt)
+  if (photo.deletedat)
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
   // If using R2/S3, redirect to a short-lived signed URL for the original
   if ((process.env.STORAGE_DRIVER || 'local').toLowerCase() === 'r2') {
     const storage = getStorage();
-    const url = await storage.getOriginalPresignedUrl(photo.origKey);
+    const url = await storage.getOriginalPresignedUrl(photo.origkey);
     return NextResponse.redirect(url, { status: 302 });
   }
 
-  const abs = origPath(photo.origKey);
+  const abs = origPath(photo.origkey);
   if (!exists(abs))
     return NextResponse.json({ error: 'file missing' }, { status: 404 });
 
   const stat = fs.statSync(abs);
-  const key = photo.origKey.toLowerCase();
+  const key = photo.origkey.toLowerCase();
   const ct =
     key.endsWith('.jpg') || key.endsWith('.jpeg')
       ? 'image/jpeg'

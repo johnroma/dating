@@ -61,7 +61,7 @@ it('upload then ingest creates files and DB row', async () => {
   const db = getDb();
   const row = await db.getPhoto(igJson.id);
   expect(row).toBeTruthy();
-  expect(row!.sizesJson.sm).toMatch(/sm\.webp$/);
+  expect(row!.sizesjson.sm).toMatch(/sm\.webp$/);
 
   // Check variant files exist
   for (const size of ['sm', 'md', 'lg'] as const) {

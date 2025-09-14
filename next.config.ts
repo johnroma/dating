@@ -15,6 +15,13 @@ const config: NextConfig = (() => {
             port: u.port || undefined,
             pathname: '/cdn/**',
           },
+          {
+            protocol:
+              (u.protocol.replace(':', '') as 'http' | 'https') || 'https',
+            hostname: u.hostname,
+            port: u.port || undefined,
+            pathname: '/**',
+          },
         ],
       };
     } catch {

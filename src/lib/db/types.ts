@@ -3,14 +3,14 @@ export type PhotoStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'PRIVATE';
 export type Photo = {
   id: string;
   status: PhotoStatus;
-  origKey: string;
-  sizesJson: Record<string, string>;
+  origkey: string;
+  sizesjson: Record<string, string>;
   width?: number | null;
   height?: number | null;
-  createdAt: string; // ISO
-  updatedAt?: string | null; // ISO
-  pHash?: string | null;
-  duplicateOf?: string | null;
-  rejectionReason?: string | null;
-  deletedAt?: string | null;
+  createdat: string; // ISO
+  updatedat?: string | null; // ISO
+  phash?: string | null;
+  duplicateof?: string | null;
+  rejectionreason?: string | null;
+  deletedat?: string | null;
 };

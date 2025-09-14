@@ -6,7 +6,7 @@ import { getDb } from '@/src/lib/db';
 
 export async function rejectPhoto(id: string, reason?: string) {
   const db = getDb();
-  await db.setStatus(id, 'REJECTED', { rejectionReason: reason });
+  await db.setStatus(id, 'REJECTED', { rejectionreason: reason });
   try {
     revalidatePath('/');
     revalidatePath('/moderate');
@@ -17,7 +17,7 @@ export async function rejectPhoto(id: string, reason?: string) {
 
 export async function restorePhoto(id: string) {
   const db = getDb();
-  await db.setStatus(id, 'APPROVED', { rejectionReason: null });
+  await db.setStatus(id, 'APPROVED', { rejectionreason: null });
   try {
     revalidatePath('/');
     revalidatePath('/moderate');

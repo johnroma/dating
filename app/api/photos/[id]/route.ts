@@ -24,7 +24,7 @@ export async function DELETE(
   // Attempt storage cleanup first; ignore failures to allow DB delete to proceed
   try {
     const storage = getStorage();
-    await storage.deleteAllForPhoto(id, photo.origKey);
+    await storage.deleteAllForPhoto(id, photo.origkey);
   } catch {
     // ignore storage cleanup errors
   }
@@ -36,7 +36,7 @@ export async function DELETE(
     const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
     const a = {
       id: crypto.randomUUID(),
-      photoId: id,
+      photoid: id,
       action: 'DELETED',
       actor: 'moderator',
       reason: null as string | null,

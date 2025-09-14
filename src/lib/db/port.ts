@@ -4,20 +4,20 @@ export type DbPort = {
   insertPhoto(p: Photo): void | Promise<void>;
   updatePhotoSizes(
     id: string,
-    sizesJson: Record<string, string>,
+    sizesjson: Record<string, string>,
     width?: number | null,
     height?: number | null
   ): void | Promise<void>;
   setStatus(
     id: string,
     status: PhotoStatus,
-    extras?: { rejectionReason?: string | null }
+    extras?: { rejectionreason?: string | null }
   ): void | Promise<void>;
   deletePhoto(id: string): void | Promise<void>;
   softDeletePhoto?(id: string): void | Promise<void>;
   restorePhoto?(id: string): void | Promise<void>;
   getPhoto(id: string): Photo | undefined | Promise<Photo | undefined>;
-  getByOrigKey(origKey: string): Photo | undefined | Promise<Photo | undefined>;
+  getByOrigKey(origkey: string): Photo | undefined | Promise<Photo | undefined>;
   listApproved(limit?: number, offset?: number): Photo[] | Promise<Photo[]>;
   listPending(limit?: number, offset?: number): Photo[] | Promise<Photo[]>;
   countApproved(): number | Promise<number>;

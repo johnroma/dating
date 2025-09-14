@@ -1,13 +1,15 @@
 # Project: Dating (Next.js App Router)
+
 Purpose: short, practical notes kept in sync with code. Optimized for LLMs and humans.
 
 ## Current Setup (server-first, no real auth yet)
+
 - **Roles & gating**
   - Types: `Role = 'viewer' | 'creator' | 'moderator'` in `src/lib/roles.ts`.
   - Middleware (`middleware.ts`) protects routes:
     - `/upload/**` → `creator|moderator`
     - `/moderate/**` → `moderator`
-    - On block: redirect to `/dev/role?reason=forbidden&from=…`, or rewrite to `/403` if `?noredirect=1`. Always sets `x-role` response header for debug.  
+    - On block: redirect to `/dev/role?reason=forbidden&from=…`, or rewrite to `/403` if `?noredirect=1`. Always sets `x-role` response header for debug.
 - **Role UX**
   - `/dev/role` (Server) + `components/RoleSwitcher.tsx` (Client) set a non-HttpOnly `role` cookie via server action.
   - Header shows current role with a link to switcher; `app/403` explains why access was denied.
@@ -25,19 +27,21 @@ Purpose: short, practical notes kept in sync with code. Optimized for LLMs and h
 ---
 
 ## Storage Port & Drivers (Step 5)
+
 - Port: `src/ports/storage.ts` → `getStorage()`
   - `putOriginal(key, buf)`, `putVariant(photoId, size, buf)`
   - `getOriginalPresignedUrl(key)`, `deleteAllForPhoto(photoId, origKey)`, `variantsBaseUrl()`
 - Adapters:
   - **local**: `src/adapters/storage/local.ts` uses FS helpers; `/mock-cdn/**` streams variants.
-  - **r2**: `src/adapters/storage/r2.ts` (AWS SDK v3). Originals under `orig/` (presigned for moderators), variants under `cdn/<id>/<size>.webp` using `CDN_BASE_URL`.  
+  - **r2**: `src/adapters/storage/r2.ts` (AWS SDK v3). Originals under `orig/` (presigned for moderators), variants under `cdn/<id>/<size>.webp` using `CDN_BASE_URL`.
 - Moderator originals:
   - Local → stream with `Cache-Control: private, no-store`
-  - R2 → 302 redirect to presigned URL (`PRESIGN_TTL_SECONDS`).  
+  - R2 → 302 redirect to presigned URL (`PRESIGN_TTL_SECONDS`).
 
 ---
 
 ## Safety, Quotas, and Upload Policy (Step 6)
+
 - **Adapter-aware guards** (skip if the upstream vendor guarantees them):
   - `src/ports/upload-policy.ts` → reports vendor guarantees (max bytes, allowed MIME).
   - `app/api/ut/upload/route.ts`:
@@ -53,13 +57,14 @@ Purpose: short, practical notes kept in sync with code. Optimized for LLMs and h
 ---
 
 ## Ingest + Lifecycle + Audit (Step 7)
+
 - **Idempotent ingest** (`POST /api/photos/ingest`)
   - Body: `{ key, pHash?, idempotencyKey? }`
   - Derives deterministic `photoId` from `idempotencyKey || "key:"+key` (sha256 → 24 hex).
   - If `{ key }` already ingested, or `idempotencyKey` seen, returns the existing photo.
   - Enforces per-role quotas (reads `role` from cookie header to avoid dynamic API in tests).
   - Generates 3 WebP variants and uploads via storage driver (and copies original to R2 in R2 mode).
-  - Inserts row with `status: 'APPROVED'` and writes an `AuditLog: 'INGESTED'`.  
+  - Inserts row with `status: 'APPROVED'` and writes an `AuditLog: 'INGESTED'`.
 - **Soft delete / restore / hard delete** (moderator only)
   - `POST /api/photos/[id]/soft-delete` → sets `deletedAt` (hidden from gallery/CDN; originals blocked)
   - `POST /api/photos/[id]/restore` → clears `deletedAt`
@@ -77,6 +82,7 @@ Purpose: short, practical notes kept in sync with code. Optimized for LLMs and h
 ---
 
 ## API quick reference
+
 - `POST /api/ut/upload` (multipart `file`) → `{ key, pHash }`
 - `POST /api/photos/ingest` → `{ id, status, sizes, duplicateOf? }`
 - `POST /api/photos/[id]/soft-delete` → `{ ok: true }` (moderator)
@@ -88,6 +94,7 @@ Purpose: short, practical notes kept in sync with code. Optimized for LLMs and h
 ---
 
 ## Env (see `.env.example`)
+
 - DB: `DB_DRIVER=sqlite|postgres`, `DATABASE_FILE`, `DATABASE_URL`
 - Storage: `STORAGE_DRIVER=local|r2`, `S3_*`, `CDN_BASE_URL`, `PRESIGN_TTL_SECONDS`
 - Upload safety: `UPLOAD_MAX_BYTES`, `UPLOAD_MAX_PIXELS`, `UPLOAD_MAX_WIDTH`, `UPLOAD_MAX_HEIGHT`
@@ -97,6 +104,7 @@ Purpose: short, practical notes kept in sync with code. Optimized for LLMs and h
 ---
 
 ## Testing notes
+
 - Use Node runtime handlers in Vitest; avoid `cookies()`/`headers()` dynamic APIs during direct handler calls.
 - Happy paths:
   - upload → ingest → gallery/CDN ok
@@ -107,8 +115,8 @@ Purpose: short, practical notes kept in sync with code. Optimized for LLMs and h
 ---
 
 ## Gotchas / Tips
+
 - Always export `export const runtime = 'nodejs'` in API routes using FS/`sharp`.
 - In R2 mode `/mock-cdn/**` returns **410 Gone** by design; UI should use adapter URLs.
 - Originals keep EXIF; variants are stripped by WebP defaults.
 - When switching to Postgres/Supabase, no call-site changes: only envs.
-

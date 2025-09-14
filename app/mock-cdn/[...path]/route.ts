@@ -26,9 +26,9 @@ export async function GET(
 
   // Enforce status: only APPROVED are publicly served for non-moderators
   if (parts.length >= 2) {
-    const photoId = parts[0];
+    const photoid = parts[0];
     const db = getDb();
-    const photo = await db.getPhoto(photoId);
+    const photo = await db.getPhoto(photoid);
     const cookieHeader = req.headers.get('cookie') || '';
     const roleCookie = cookieHeader
       .split(/;\s*/)
@@ -38,7 +38,7 @@ export async function GET(
     const isModerator = role === 'moderator';
     if (
       !photo ||
-      photo.deletedAt ||
+      photo.deletedat ||
       (photo.status !== 'APPROVED' && !isModerator)
     ) {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 });

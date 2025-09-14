@@ -19,64 +19,41 @@ function getConn() {
   db = new Database(file);
   db.pragma('journal_mode = WAL');
   db.exec(`
-    CREATE TABLE IF NOT EXISTS "Photo"(
-      "id" "TEXT" PRIMARY KEY,
-      "status" "TEXT" NOT NULL,
-      "origKey" "TEXT" NOT NULL,
-      "sizesJson" "TEXT" NOT NULL,
-      "width" "INTEGER",
-      "height" "INTEGER",
-      "createdAt" "TEXT" NOT NULL,
-      "pHash" "TEXT",
-      "duplicateOf" "TEXT",
-      "updatedAt" "TEXT",
-      "rejectionReason" "TEXT"
+    CREATE TABLE IF NOT EXISTS photo(
+      id TEXT PRIMARY KEY,
+      status TEXT NOT NULL,
+      origkey TEXT NOT NULL,
+      sizesjson TEXT NOT NULL,
+      width INTEGER,
+      height INTEGER,
+      createdat TEXT NOT NULL,
+      phash TEXT,
+      duplicateof TEXT,
+      updatedat TEXT,
+      rejectionreason TEXT,
+      deletedat TEXT
     );
-    CREATE INDEX IF NOT EXISTS "idx_photo_status_created" ON "Photo"("status", "createdAt" DESC);
-  `);
-  // Idempotent ALTERs (older DBs may lack the new columns)
-  try {
-    db.exec('ALTER TABLE Photo ADD COLUMN updatedAt TEXT');
-  } catch {
-    // already has column
-  }
-  try {
-    db.exec('ALTER TABLE Photo ADD COLUMN rejectionReason TEXT');
-  } catch {
-    // already has column
-  }
-  try {
-    db.exec('ALTER TABLE Photo ADD COLUMN pHash TEXT');
-  } catch {
-    // Column already exists
-  }
-  try {
-    db.exec('ALTER TABLE Photo ADD COLUMN duplicateOf TEXT');
-  } catch {
-    // Column already exists
-  }
-  try {
-    db.exec('ALTER TABLE Photo ADD COLUMN deletedAt TEXT');
-  } catch {
-    // Column already exists
-  }
+    CREATE INDEX IF NOT EXISTS idx_photo_status_created ON photo(status, createdat DESC);
 
-  // Step 7 auxiliary tables
+    CREATE TABLE IF NOT EXISTS ingestkeys(
+      id TEXT PRIMARY KEY,
+      photoid TEXT NOT NULL,
+      createdat TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS auditlog(
+      id TEXT PRIMARY KEY,
+      photoid TEXT NOT NULL,
+      action TEXT NOT NULL,
+      actor TEXT NOT NULL,
+      reason TEXT,
+      at TEXT NOT NULL
+    );
+  `);
+
+  // Create additional indexes
   db.exec(`
-    CREATE TABLE IF NOT EXISTS "IngestKeys"(
-      "id" "TEXT" PRIMARY KEY,
-      "photoId" "TEXT" NOT NULL,
-      "createdAt" "TEXT" NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS "AuditLog"(
-      "id" "TEXT" PRIMARY KEY,
-      "photoId" "TEXT" NOT NULL,
-      "action" "TEXT" NOT NULL,
-      "actor" "TEXT" NOT NULL,
-      "reason" "TEXT",
-      "at" "TEXT" NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS "idx_photo_deleted" ON "Photo"("deletedAt");
+    CREATE INDEX IF NOT EXISTS idx_photo_deleted ON photo(deletedat);
   `);
   return db;
 }
@@ -84,41 +61,41 @@ function getConn() {
 const conn = getConn();
 
 const stmtInsert = conn.prepare(
-  'INSERT INTO Photo (id, status, origKey, sizesJson, width, height, createdAt, updatedAt, rejectionReason, pHash, duplicateOf, deletedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  'INSERT INTO photo (id, status, origkey, sizesjson, width, height, createdat, updatedat, rejectionreason, phash, duplicateof) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
 );
 
 const stmtUpdateSizes = conn.prepare(
-  'UPDATE Photo SET sizesJson = ?, width = ?, height = ?, updatedAt = ? WHERE id = ?'
+  'UPDATE photo SET sizesjson = ?, width = ?, height = ?, updatedat = ? WHERE id = ?'
 );
 
 const stmtSetStatus = conn.prepare(
-  'UPDATE Photo SET status = ?, rejectionReason = COALESCE(?, rejectionReason), updatedAt = ? WHERE id = ?'
+  'UPDATE photo SET status = ?, rejectionreason = COALESCE(?, rejectionreason), updatedat = ? WHERE id = ?'
 );
 const stmtSoftDelete = conn.prepare(
-  'UPDATE Photo SET deletedAt = ?, updatedAt = ? WHERE id = ?'
+  'UPDATE photo SET deletedat = ?, updatedat = ? WHERE id = ?'
 );
 const stmtRestore = conn.prepare(
-  'UPDATE Photo SET deletedAt = NULL, updatedAt = ? WHERE id = ?'
+  'UPDATE photo SET deletedat = NULL, updatedat = ? WHERE id = ?'
 );
-const stmtDelete = conn.prepare('DELETE FROM Photo WHERE id = ?');
-const stmtGet = conn.prepare('SELECT * FROM Photo WHERE id = ?');
+const stmtDelete = conn.prepare('DELETE FROM photo WHERE id = ?');
+const stmtGet = conn.prepare('SELECT * FROM photo WHERE id = ?');
 const stmtGetByOrig = conn.prepare(
-  'SELECT * FROM Photo WHERE origKey = ? LIMIT 1'
+  'SELECT * FROM photo WHERE origkey = ? LIMIT 1'
 );
 const stmtUpsertIngestKey = conn.prepare(
-  'INSERT INTO IngestKeys(id, photoId, createdAt) VALUES (?, ?, ?) ON CONFLICT(id) DO NOTHING'
+  'INSERT INTO ingestkeys(id, photoid, createdat) VALUES (?, ?, ?) ON CONFLICT(id) DO NOTHING'
 );
 const stmtGetIngestKey = conn.prepare(
-  'SELECT photoId FROM IngestKeys WHERE id = ?'
+  'SELECT photoid FROM ingestkeys WHERE id = ?'
 );
 const stmtInsertAudit = conn.prepare(
-  'INSERT INTO AuditLog(id, photoId, action, actor, reason, at) VALUES(?, ?, ?, ?, ?, ?)'
+  'INSERT INTO auditlog(id, photoid, action, actor, reason, at) VALUES(?, ?, ?, ?, ?, ?)'
 );
 
 function mapRow(row: unknown): Photo | undefined {
   if (!row || typeof row !== 'object') return undefined;
   const r = row as Record<string, unknown>;
-  const sizesRaw = r['sizesJson'];
+  const sizesRaw = r['sizesjson'];
   const sizes =
     typeof sizesRaw === 'string'
       ? JSON.parse(sizesRaw as string)
@@ -126,17 +103,17 @@ function mapRow(row: unknown): Photo | undefined {
   return {
     id: String(r['id']),
     status: r['status'] as PhotoStatus,
-    origKey: String(r['origKey']),
-    sizesJson: sizes || {},
+    origkey: String(r['origkey']),
+    sizesjson: sizes || {},
     width: (r['width'] as number | null | undefined) ?? null,
     height: (r['height'] as number | null | undefined) ?? null,
-    createdAt: String(r['createdAt']),
-    updatedAt: (r['updatedAt'] as string | null | undefined) ?? null,
-    pHash: (r['pHash'] as string | null | undefined) ?? null,
-    duplicateOf: (r['duplicateOf'] as string | null | undefined) ?? null,
-    rejectionReason:
-      (r['rejectionReason'] as string | null | undefined) ?? null,
-    deletedAt: (r['deletedAt'] as string | null | undefined) ?? null,
+    createdat: String(r['createdat']),
+    updatedat: (r['updatedat'] as string | null | undefined) ?? null,
+    phash: (r['phash'] as string | null | undefined) ?? null,
+    duplicateof: (r['duplicateof'] as string | null | undefined) ?? null,
+    rejectionreason:
+      (r['rejectionreason'] as string | null | undefined) ?? null,
+    deletedat: (r['deletedat'] as string | null | undefined) ?? null,
   };
 }
 
@@ -144,27 +121,26 @@ export const insertPhoto: DbPort['insertPhoto'] = p => {
   stmtInsert.run(
     p.id,
     p.status,
-    p.origKey,
-    JSON.stringify(p.sizesJson || {}),
+    p.origkey,
+    JSON.stringify(p.sizesjson || {}),
     p.width ?? null,
     p.height ?? null,
-    p.createdAt,
-    p.updatedAt ?? p.createdAt,
-    p.rejectionReason ?? null,
-    p.pHash ?? null,
-    p.duplicateOf ?? null,
-    p.deletedAt ?? null
+    p.createdat,
+    p.updatedat ?? p.createdat,
+    p.rejectionreason ?? null,
+    p.phash ?? null,
+    p.duplicateof ?? null
   );
 };
 
 export const updatePhotoSizes: DbPort['updatePhotoSizes'] = (
   id,
-  sizesJson,
+  sizesjson,
   width,
   height
 ) => {
   stmtUpdateSizes.run(
-    JSON.stringify(sizesJson || {}),
+    JSON.stringify(sizesjson || {}),
     width ?? null,
     height ?? null,
     new Date().toISOString(),
@@ -174,7 +150,7 @@ export const updatePhotoSizes: DbPort['updatePhotoSizes'] = (
 
 export const setStatus: DbPort['setStatus'] = (id, status, extras) => {
   const now = new Date().toISOString();
-  stmtSetStatus.run(status, extras?.rejectionReason ?? null, now, id);
+  stmtSetStatus.run(status, extras?.rejectionreason ?? null, now, id);
 };
 
 export const deletePhoto: DbPort['deletePhoto'] = id => {
@@ -196,25 +172,25 @@ export const getPhoto: DbPort['getPhoto'] = id => {
   return mapRow(row);
 };
 
-export const getByOrigKey: DbPort['getByOrigKey'] = origKey => {
-  const row = stmtGetByOrig.get(origKey);
+export const getByOrigKey: DbPort['getByOrigKey'] = origkey => {
+  const row = stmtGetByOrig.get(origkey);
   return mapRow(row);
 };
 
 // Step 7 helpers (not in DbPort on purpose; import directly when needed)
 export function upsertIngestKey(
   id: string,
-  photoId: string
+  photoid: string
 ): 'created' | 'exists' {
-  const row = stmtGetIngestKey.get(id) as { photoId: string } | undefined;
-  if (row?.photoId) return 'exists';
-  stmtUpsertIngestKey.run(id, photoId, new Date().toISOString());
+  const row = stmtGetIngestKey.get(id) as { photoid: string } | undefined;
+  if (row?.photoid) return 'exists';
+  stmtUpsertIngestKey.run(id, photoid, new Date().toISOString());
   return 'created';
 }
 
 export function insertAudit(a: {
   id: string;
-  photoId: string;
+  photoid: string;
   action: string;
   actor: string;
   reason?: string | null;
@@ -222,7 +198,7 @@ export function insertAudit(a: {
 }) {
   stmtInsertAudit.run(
     a.id,
-    a.photoId,
+    a.photoid,
     a.action,
     a.actor,
     a.reason ?? null,
@@ -236,7 +212,7 @@ export const listApproved: DbPort['listApproved'] = (
 ) => {
   const rows = conn
     .prepare(
-      'SELECT * FROM Photo WHERE status = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?'
+      'SELECT * FROM photo WHERE status = ? ORDER BY createdat DESC LIMIT ? OFFSET ?'
     )
     .all('APPROVED', limit, offset);
   return rows.map(mapRow).filter(Boolean) as Photo[];
@@ -245,7 +221,7 @@ export const listApproved: DbPort['listApproved'] = (
 export const listPending: DbPort['listPending'] = (limit = 50, offset = 0) => {
   const rows = conn
     .prepare(
-      'SELECT * FROM Photo WHERE status = ? ORDER BY createdAt DESC LIMIT ? OFFSET ?'
+      'SELECT * FROM photo WHERE status = ? ORDER BY createdat DESC LIMIT ? OFFSET ?'
     )
     .all('PENDING', limit, offset);
   return rows.map(mapRow).filter(Boolean) as Photo[];
@@ -253,21 +229,21 @@ export const listPending: DbPort['listPending'] = (limit = 50, offset = 0) => {
 
 export const listRecent: DbPort['listRecent'] = (limit = 200, offset = 0) => {
   const rows = conn
-    .prepare('SELECT * FROM Photo ORDER BY createdAt DESC LIMIT ? OFFSET ?')
+    .prepare('SELECT * FROM photo ORDER BY createdat DESC LIMIT ? OFFSET ?')
     .all(limit, offset);
   return rows.map(mapRow).filter(Boolean) as Photo[];
 };
 
 export const countApproved: DbPort['countApproved'] = () => {
   const row = conn
-    .prepare('SELECT COUNT(*) as c FROM Photo WHERE status = ?')
+    .prepare('SELECT COUNT(*) as c FROM photo WHERE status = ?')
     .get('APPROVED') as { c: number } | undefined;
   return Number(row?.c ?? 0);
 };
 
 export const countPending: DbPort['countPending'] = () => {
   const row = conn
-    .prepare('SELECT COUNT(*) as c FROM Photo WHERE status = ?')
+    .prepare('SELECT COUNT(*) as c FROM photo WHERE status = ?')
     .get('PENDING') as { c: number } | undefined;
   return Number(row?.c ?? 0);
 };

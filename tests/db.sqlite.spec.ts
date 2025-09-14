@@ -30,16 +30,16 @@ it('sqlite CRUD works', async () => {
   await db.insertPhoto({
     id,
     status: 'PENDING',
-    origKey: `.data/storage/photos-orig/${id}.bin`,
-    sizesJson: {},
+    origkey: `.data/storage/photos-orig/${id}.bin`,
+    sizesjson: {},
     width: null,
     height: null,
-    createdAt: new Date().toISOString(),
+    createdat: new Date().toISOString(),
   });
 
   expect(await db.getPhoto(id)).toBeTruthy();
   await db.updatePhotoSizes(id, { sm: `/mock-cdn/${id}/sm.webp` }, 256, 256);
-  expect((await db.getPhoto(id))!.sizesJson.sm).toContain('sm.webp');
+  expect((await db.getPhoto(id))!.sizesjson.sm).toContain('sm.webp');
 
   await db.setStatus(id, 'APPROVED');
   expect((await db.getPhoto(id))!.status).toBe('APPROVED');
