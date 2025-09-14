@@ -6,11 +6,12 @@ import path from 'node:path';
 import { NextResponse } from 'next/server';
 
 import { getDb } from '@/src/lib/db';
-import { getRoleFromCookies } from '@/src/lib/role-cookie';
+import { COOKIE_NAME } from '@/src/lib/role-cookie';
+import { parseRole } from '@/src/lib/roles';
 import { CDN, exists } from '@/src/lib/storage/fs';
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ path: string | string[] }> }
 ) {
   if ((process.env.STORAGE_DRIVER || 'local').toLowerCase() === 'r2') {
@@ -27,7 +28,12 @@ export async function GET(
     const photoId = parts[0];
     const db = getDb();
     const photo = await db.getPhoto(photoId);
-    const role = await getRoleFromCookies();
+    const cookieHeader = req.headers.get('cookie') || '';
+    const roleCookie = cookieHeader
+      .split(/;\s*/)
+      .map(kv => kv.split('='))
+      .find(([k]) => k === COOKIE_NAME)?.[1];
+    const role = parseRole(roleCookie);
     const isModerator = role === 'moderator';
     if (!photo || (photo.status !== 'APPROVED' && !isModerator)) {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 });

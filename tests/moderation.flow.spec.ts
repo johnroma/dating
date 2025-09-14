@@ -39,7 +39,7 @@ describe('moderation flow', () => {
     const fd = new FormData();
     fd.set(
       'file',
-      new Blob([await tinyPngBuffer()], { type: 'image/png' }),
+      new Blob([new Uint8Array(await tinyPngBuffer())], { type: 'image/png' }),
       'tiny.png'
     );
     const upRes = await upload(

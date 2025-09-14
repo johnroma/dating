@@ -30,7 +30,7 @@ async function buildTinyPngBlob(): Promise<Blob> {
   })
     .png()
     .toBuffer();
-  return new Blob([buf], { type: 'image/png' });
+  return new Blob([new Uint8Array(buf)], { type: 'image/png' });
 }
 
 it('upload then ingest creates files and DB row', async () => {
