@@ -8,4 +8,6 @@ export type Photo = {
   width?: number | null;
   height?: number | null;
   createdAt: string; // ISO
+  updatedAt?: string | null; // ISO
+  rejectionReason?: string | null;
 };

@@ -16,8 +16,12 @@ const init = (async () => {
       sizesJson JSONB NOT NULL,
       width INTEGER,
       height INTEGER,
-      createdAt TIMESTAMPTZ NOT NULL
+      "createdAt" TIMESTAMPTZ NOT NULL,
+      "updatedAt" TIMESTAMPTZ,
+      "rejectionReason" TEXT
     );
+    ALTER TABLE "Photo" ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMPTZ;
+    ALTER TABLE "Photo" ADD COLUMN IF NOT EXISTS "rejectionReason" TEXT;
     CREATE INDEX IF NOT EXISTS photo_status_created ON "Photo"(status, "createdAt" DESC);
   `);
 })();
@@ -40,13 +44,21 @@ function rowToPhoto(row: Record<string, unknown>): Photo {
       createdAtRaw instanceof Date
         ? createdAtRaw.toISOString()
         : String(createdAtRaw),
+    updatedAt:
+      (row['updatedAt'] ?? row['updatedat'])
+        ? new Date(String(row['updatedAt'] ?? row['updatedat'])).toISOString()
+        : null,
+    rejectionReason:
+      (row['rejectionReason'] ?? row['rejectionreason'])
+        ? String(row['rejectionReason'] ?? row['rejectionreason'])
+        : null,
   };
 }
 
 export const insertPhoto: DbPort['insertPhoto'] = async p => {
   await init;
   await pool.query(
-    'INSERT INTO "Photo" (id, status, origKey, sizesJson, width, height, "createdAt") VALUES ($1,$2,$3,$4,$5,$6,$7)',
+    'INSERT INTO "Photo" (id, status, origKey, sizesJson, width, height, "createdAt", "updatedAt", "rejectionReason") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
     [
       p.id,
       p.status,
@@ -56,6 +68,8 @@ export const insertPhoto: DbPort['insertPhoto'] = async p => {
       p.width ?? null,
       p.height ?? null,
       p.createdAt,
+      p.updatedAt ?? p.createdAt,
+      p.rejectionReason ?? null,
     ]
   );
 };
@@ -73,12 +87,13 @@ export const updatePhotoSizes: DbPort['updatePhotoSizes'] = async (
   );
 };
 
-export const setStatus: DbPort['setStatus'] = async (id, status) => {
+export const setStatus: DbPort['setStatus'] = async (id, status, extras) => {
   await init;
-  await pool.query('UPDATE "Photo" SET status = $1 WHERE id = $2', [
-    status,
-    id,
-  ]);
+  const now = new Date();
+  await pool.query(
+    'UPDATE "Photo" SET status = $1, "rejectionReason" = COALESCE($2, "rejectionReason"), "updatedAt" = $3 WHERE id = $4',
+    [status, extras?.rejectionReason ?? null, now.toISOString(), id]
+  );
 };
 
 export const deletePhoto: DbPort['deletePhoto'] = async id => {
@@ -115,6 +130,18 @@ export const listPending: DbPort['listPending'] = async (
   const { rows } = await pool.query(
     'SELECT * FROM "Photo" WHERE status = $1 ORDER BY "createdAt" DESC LIMIT $2 OFFSET $3',
     ['PENDING', limit, offset]
+  );
+  return rows.map(rowToPhoto);
+};
+
+export const listRecent: DbPort['listRecent'] = async (
+  limit = 200,
+  offset = 0
+) => {
+  await init;
+  const { rows } = await pool.query(
+    'SELECT * FROM "Photo" ORDER BY "createdAt" DESC LIMIT $1 OFFSET $2',
+    [limit, offset]
   );
   return rows.map(rowToPhoto);
 };

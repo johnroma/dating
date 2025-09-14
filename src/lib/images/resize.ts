@@ -1,6 +1,7 @@
-import sharp from 'sharp';
 import fs from 'node:fs';
 import path from 'node:path';
+
+import sharp from 'sharp';
 
 import { variantPath } from '@/src/lib/storage/fs';
 
@@ -37,7 +38,12 @@ export async function makeVariants(args: {
     entries.map(async ([label, max]) => {
       const buf = await sharp(origAbsPath)
         .rotate()
-        .resize({ width: max, height: max, fit: 'inside', withoutEnlargement: true })
+        .resize({
+          width: max,
+          height: max,
+          fit: 'inside',
+          withoutEnlargement: true,
+        })
         .webp({ quality: 75 })
         .toBuffer();
       const outAbs = variantPath(photoId, label);

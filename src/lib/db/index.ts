@@ -23,7 +23,8 @@ function getDb(): DbPort {
     insertPhoto: async p => (await load()).insertPhoto(p),
     updatePhotoSizes: async (id, sizesJson, width, height) =>
       (await load()).updatePhotoSizes(id, sizesJson, width, height),
-    setStatus: async (id, status) => (await load()).setStatus(id, status),
+    setStatus: async (id, status, extras) =>
+      (await load()).setStatus(id, status, extras),
     deletePhoto: async id => (await load()).deletePhoto(id),
     getPhoto: async id => (await load()).getPhoto(id),
     listApproved: async (limit, offset) =>
@@ -32,5 +33,7 @@ function getDb(): DbPort {
       (await load()).listPending(limit, offset),
     countApproved: async () => (await load()).countApproved(),
     countPending: async () => (await load()).countPending(),
+    listRecent: async (limit, offset) =>
+      (await load()).listRecent(limit, offset),
   } satisfies DbPort;
 }
