@@ -34,7 +34,7 @@ export default function PhotoUploader() {
       if (!igRes.ok) throw new Error(igJson?.error || 'Ingest failed');
 
       setFile(null);
-      router.refresh();
+      router.push(`/p/${igJson.id}`);
     } catch (err: unknown) {
       const m = err instanceof Error ? err.message : String(err);
       setError(m || 'Unknown error');

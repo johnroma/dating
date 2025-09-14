@@ -7,6 +7,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/src/lib/db';
 import { getRoleFromCookies } from '@/src/lib/role-cookie';
 import { origPath, exists } from '@/src/lib/storage/fs';
+import { getStorage } from '@/src/ports/storage';
 
 export async function GET(
   _req: Request,
@@ -17,10 +18,16 @@ export async function GET(
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
   const db = getDb();
-  const resolvedParams = await params;
-  const id = resolvedParams.id;
+  const { id } = await params;
   const photo = await db.getPhoto(id);
   if (!photo) return NextResponse.json({ error: 'not found' }, { status: 404 });
+
+  // If using R2/S3, redirect to a short-lived signed URL for the original
+  if ((process.env.STORAGE_DRIVER || 'local').toLowerCase() === 'r2') {
+    const storage = getStorage();
+    const url = await storage.getOriginalPresignedUrl(photo.origKey);
+    return NextResponse.redirect(url, { status: 302 });
+  }
 
   const abs = origPath(photo.origKey);
   if (!exists(abs))
