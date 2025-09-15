@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream';
+
 import {
   S3Client,
   PutObjectCommand,
@@ -33,6 +35,30 @@ const client = new S3Client({
 const BUCKET_ORIG = () => required('S3_BUCKET_ORIG');
 const BUCKET_CDN = () => required('S3_BUCKET_CDN');
 const CDN_BASE = () => required('CDN_BASE_URL');
+
+async function streamToBuffer(stream: any): Promise<Buffer> {
+  if (!stream) return Buffer.alloc(0);
+  // AWS SDK v3 returns a web/whatwg ReadableStream in Node 18+; normalize
+  if (typeof (stream as any).pipe === 'function') {
+    const chunks: Buffer[] = [];
+    return await new Promise<Buffer>((resolve, reject) => {
+      (stream as Readable)
+        .on('data', c => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)))
+        .on('end', () => resolve(Buffer.concat(chunks)))
+        .on('error', reject);
+    });
+  } else if (typeof (stream as any).getReader === 'function') {
+    const reader = (stream as ReadableStream).getReader();
+    const chunks: Uint8Array[] = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+    return Buffer.concat(chunks.map(u => Buffer.from(u)));
+  }
+  return Buffer.from((await (stream as any).arrayBuffer?.()) ?? []);
+}
 
 export const storage: StoragePort = {
   async putOriginal(key, buf) {
@@ -85,5 +111,12 @@ export const storage: StoragePort = {
 
   variantsBaseUrl() {
     return CDN_BASE();
+  },
+
+  async readOriginalBuffer(origKey: string): Promise<Buffer> {
+    const Key = `orig/${origKey}`;
+    const Bucket = BUCKET_ORIG();
+    const res = await client.send(new GetObjectCommand({ Bucket, Key }));
+    return await streamToBuffer(res.Body as any);
   },
 };

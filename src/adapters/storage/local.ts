@@ -75,4 +75,9 @@ export const storage: StoragePort = {
   variantsBaseUrl() {
     return baseUrl();
   },
+
+  async readOriginalBuffer(origKey: string): Promise<Buffer> {
+    const p = path.join(localOrigDir(), origKey);
+    return await fs.promises.readFile(p);
+  },
 };

@@ -2,7 +2,6 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import crypto from 'node:crypto';
-import fs from 'node:fs';
 
 import { NextResponse } from 'next/server';
 import sharp from 'sharp';
@@ -14,7 +13,6 @@ import { enforceQuotaOrThrow, getRoleQuota, getUsage } from '@/src/lib/quotas';
 import { ipFromHeaders, limit } from '@/src/lib/rate/limiter';
 import { COOKIE_NAME } from '@/src/lib/role-cookie';
 import { parseRole, type Role } from '@/src/lib/roles';
-import { origPath } from '@/src/lib/storage/fs';
 import { getStorage } from '@/src/ports/storage';
 
 const LIMIT_INGESTS = Number(process.env.RATE_INGESTS_PER_MINUTE || 60);
@@ -121,22 +119,17 @@ export async function POST(req: Request) {
 
   const storage = await getStorage();
   const photoId = candidateId; // deterministic id for idempotency
-  const origAbs = origPath(key);
 
-  // If using R2/S3, copy original from local FS (written by UT route) to bucket
-  if ((process.env.STORAGE_DRIVER || 'local').toLowerCase() === 'r2') {
-    const buf = await fs.promises.readFile(origAbs);
-    await storage.putOriginal(key, buf);
-    // Optional cleanup: keep local copy for now (tests depend on it in local mode)
-  }
+  // Read original file via storage adapter (works for both local and R2)
+  const origBuf = await storage.readOriginalBuffer(key);
 
   // Compute variants and upload via storage driver
-  const input = sharp(origAbs, { unlimited: true });
+  const input = sharp(origBuf, { unlimited: true });
   const meta = await input.metadata();
   const width = Math.round(meta.width || 0);
   const height = Math.round(meta.height || 0);
 
-  const smBuf = await sharp(origAbs)
+  const smBuf = await sharp(origBuf)
     .rotate()
     .resize({
       width: SIZES.sm,
@@ -146,7 +139,7 @@ export async function POST(req: Request) {
     })
     .webp({ quality: 75 })
     .toBuffer();
-  const mdBuf = await sharp(origAbs)
+  const mdBuf = await sharp(origBuf)
     .rotate()
     .resize({
       width: SIZES.md,
@@ -156,7 +149,7 @@ export async function POST(req: Request) {
     })
     .webp({ quality: 75 })
     .toBuffer();
-  const lgBuf = await sharp(origAbs)
+  const lgBuf = await sharp(origBuf)
     .rotate()
     .resize({
       width: SIZES.lg,
