@@ -9,6 +9,7 @@ import { v4 as uuid } from 'uuid';
 import { validateDimensions } from '@/src/lib/images/guard';
 import { dHashHex } from '@/src/lib/images/hash';
 import { sniffImage } from '@/src/lib/images/sniff';
+import { isLocalDriver } from '@/src/lib/paths';
 import { ipFromHeaders, limit } from '@/src/lib/rate/limiter';
 import { writeOriginal } from '@/src/lib/storage/fs';
 import { getUploadCapabilities } from '@/src/ports/upload-policy';
@@ -18,6 +19,14 @@ const LIMIT_UPLOADS = Number(process.env.RATE_UPLOADS_PER_MINUTE || 20);
 const ALLOWED = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 export async function POST(req: Request) {
+  // Only ensure local dirs if we're *actually* using local driver.
+  if (isLocalDriver) {
+    const { ensureLocalStorageDirs } = await import(
+      '@/src/adapters/storage/local'
+    );
+    ensureLocalStorageDirs();
+  }
+
   // rate limit per IP
   const ip = ipFromHeaders(req);
   const allowed = limit(`upl:${ip}`, {

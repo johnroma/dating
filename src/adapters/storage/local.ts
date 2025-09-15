@@ -1,12 +1,18 @@
-import fs from 'node:fs';
+import fs, { mkdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
-import {
-  origPath,
-  writeOriginal as fsWriteOriginal,
-  writeVariant as fsWriteVariant,
-} from '@/src/lib/storage/fs';
+import { localOrigDir, localCdnDir, localStorageRoot } from '@/src/lib/paths';
 import type { StoragePort } from '@/src/ports/storage';
+
+const ROOT = localStorageRoot();
+const ORIG = localOrigDir();
+const CDN = localCdnDir();
+
+export function ensureLocalStorageDirs() {
+  [ROOT, ORIG, CDN].forEach(p => {
+    if (!existsSync(p)) mkdirSync(p, { recursive: true });
+  });
+}
 
 function baseUrl(): string {
   return process.env.NEXT_PUBLIC_CDN_BASE_URL || '/mock-cdn';
@@ -20,13 +26,39 @@ async function rmIfExists(absPath: string): Promise<void> {
   }
 }
 
+function origPath(key: string): string {
+  return path.join(ORIG, key);
+}
+
+function variantPath(photoId: string, size: 'sm' | 'md' | 'lg'): string {
+  return path.join(CDN, photoId, `${size}.webp`);
+}
+
+async function writeOriginal(key: string, buf: Buffer): Promise<void> {
+  const abs = origPath(key);
+  const dir = path.dirname(abs);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  await fs.promises.writeFile(abs, buf);
+}
+
+async function writeVariant(
+  photoId: string,
+  size: 'sm' | 'md' | 'lg',
+  buf: Buffer
+): Promise<void> {
+  const abs = variantPath(photoId, size);
+  const dir = path.dirname(abs);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  await fs.promises.writeFile(abs, buf);
+}
+
 export const storage: StoragePort = {
   async putOriginal(key, buf) {
-    await fsWriteOriginal(key, buf);
+    await writeOriginal(key, buf);
   },
 
   async putVariant(photoId, size, buf) {
-    await fsWriteVariant(photoId, size, buf);
+    await writeVariant(photoId, size, buf);
     return `${baseUrl()}/${photoId}/${size}.webp`;
   },
 
@@ -39,11 +71,7 @@ export const storage: StoragePort = {
 
   async deleteAllForPhoto(photoId, origKey) {
     const origAbs = origPath(origKey);
-    const variantsDir = path.join(
-      process.cwd(),
-      '.data/storage/photos-cdn',
-      photoId
-    );
+    const variantsDir = path.join(CDN, photoId);
     await rmIfExists(origAbs);
     await rmIfExists(variantsDir);
   },
