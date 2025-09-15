@@ -17,8 +17,10 @@ const ca =
     : undefined);
 
 // Pragmatic TLS: encrypt without CA verification (libpq sslmode=require style)
+// Accept both env spellings: PGSSL_NO_VERIFY and PG_SSL_NO_VERIFY
 const noVerify =
   process.env.PGSSL_NO_VERIFY === '1' ||
+  process.env.PG_SSL_NO_VERIFY === '1' ||
   /\bsslmode=(?:require|allow|prefer|no-verify)\b/i.test(
     connectionString || ''
   );
