@@ -3,18 +3,20 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { ORIG, ROOT } from '../src/lib/storage/fs';
+import { localOrigDir, localStorageRoot } from '../src/lib/paths';
+import { ensureLocalStorageDirs } from '../src/adapters/storage/local';
 
 const TMP_DB = path.join(process.cwd(), '.data/db/test.db');
 
 beforeAll(() => {
   process.env.DB_DRIVER = 'sqlite';
   process.env.DATABASE_FILE = TMP_DB;
+  ensureLocalStorageDirs();
 });
 
 afterAll(() => {
   try {
-    fs.rmSync(path.join(process.cwd(), ROOT), { recursive: true, force: true });
+    fs.rmSync(localStorageRoot(), { recursive: true, force: true });
   } catch {}
 });
 
@@ -43,7 +45,7 @@ it('upload then ingest creates files and DB row', async () => {
   );
   const upJson = await upRes.json();
   expect(upJson.key).toBeTruthy();
-  const origAbs = path.join(process.cwd(), ORIG, upJson.key);
+  const origAbs = path.join(localOrigDir(), upJson.key);
   expect(fs.existsSync(origAbs)).toBe(true);
 
   const igRes = await ingest(

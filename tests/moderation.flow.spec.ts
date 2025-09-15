@@ -3,7 +3,8 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { ORIG, ROOT } from '../src/lib/storage/fs';
+import { localOrigDir, localStorageRoot } from '../src/lib/paths';
+import { ensureLocalStorageDirs } from '../src/adapters/storage/local';
 
 const TMP_DB = path.join(process.cwd(), '.data/db/test.db');
 
@@ -24,11 +25,12 @@ async function tinyPngBuffer() {
 beforeAll(() => {
   process.env.DB_DRIVER = 'sqlite';
   process.env.DATABASE_FILE = TMP_DB;
+  ensureLocalStorageDirs();
 });
 
 afterAll(() => {
   try {
-    fs.rmSync(path.join(process.cwd(), ROOT), { recursive: true, force: true });
+    fs.rmSync(localStorageRoot(), { recursive: true, force: true });
   } catch {}
 });
 
@@ -47,7 +49,7 @@ describe('moderation flow', () => {
     );
     const upJson = await upRes.json();
     expect(upJson.key).toBeTruthy();
-    const origAbs = path.join(process.cwd(), ORIG, upJson.key);
+    const origAbs = path.join(localOrigDir(), upJson.key);
     const origSize = fs.statSync(origAbs).size;
 
     const igRes = await ingest(
