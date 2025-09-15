@@ -26,7 +26,7 @@ export async function GET(
 
   // If using R2/S3, redirect to a short-lived signed URL for the original
   if ((process.env.STORAGE_DRIVER || 'local').toLowerCase() === 'r2') {
-    const storage = getStorage();
+    const storage = await getStorage();
     const url = await storage.getOriginalPresignedUrl(photo.origkey);
     return NextResponse.redirect(url, { status: 302 });
   }

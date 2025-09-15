@@ -23,7 +23,7 @@ export async function DELETE(
 
   // Attempt storage cleanup first; ignore failures to allow DB delete to proceed
   try {
-    const storage = getStorage();
+    const storage = await getStorage();
     await storage.deleteAllForPhoto(id, photo.origkey);
   } catch {
     // ignore storage cleanup errors

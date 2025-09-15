@@ -1,13 +1,13 @@
 import fs, { mkdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
-import { localOrigDir, localCdnDir, localStorageRoot } from '@/src/lib/paths';
+import { localStorageRoot, localOrigDir, localCdnDir } from '@/src/lib/paths';
 import type { StoragePort } from '@/src/ports/storage';
-
 const ROOT = localStorageRoot();
 const ORIG = localOrigDir();
 const CDN = localCdnDir();
 
+// (No filesystem side effects at module load.)
 export function ensureLocalStorageDirs() {
   [ROOT, ORIG, CDN].forEach(p => {
     if (!existsSync(p)) mkdirSync(p, { recursive: true });

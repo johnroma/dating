@@ -119,7 +119,7 @@ export async function POST(req: Request) {
   // optional duplicate detection (stub)
   const duplicateOf = pHash ? await findDuplicateByHash(pHash) : undefined;
 
-  const storage = getStorage();
+  const storage = await getStorage();
   const photoId = candidateId; // deterministic id for idempotency
   const origAbs = origPath(key);
 

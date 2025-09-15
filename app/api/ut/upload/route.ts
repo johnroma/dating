@@ -11,7 +11,7 @@ import { dHashHex } from '@/src/lib/images/hash';
 import { sniffImage } from '@/src/lib/images/sniff';
 import { isLocalDriver } from '@/src/lib/paths';
 import { ipFromHeaders, limit } from '@/src/lib/rate/limiter';
-import { writeOriginal } from '@/src/lib/storage/fs';
+import { getStorage } from '@/src/ports/storage';
 import { getUploadCapabilities } from '@/src/ports/upload-policy';
 
 const MAX_BYTES = Number(process.env.UPLOAD_MAX_BYTES || 10 * 1024 * 1024);
@@ -19,7 +19,7 @@ const LIMIT_UPLOADS = Number(process.env.RATE_UPLOADS_PER_MINUTE || 20);
 const ALLOWED = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 export async function POST(req: Request) {
-  // Only ensure local dirs if we're *actually* using local driver.
+  // Only prepare local folders when we're really using the local driver.
   if (isLocalDriver) {
     const { ensureLocalStorageDirs } = await import(
       '@/src/adapters/storage/local'
@@ -82,8 +82,9 @@ export async function POST(req: Request) {
   const ext = mime.getExtension(type) || 'bin';
   const key = `${uuid()}.${ext}`;
 
-  // save original locally (current flow)
-  await writeOriginal(key, buf);
+  // save original using storage adapter (works with both local and R2)
+  const storage = await getStorage();
+  await storage.putOriginal(key, buf);
 
   // compute perceptual hash for duplicate detection
   const pHash = await dHashHex(buf);

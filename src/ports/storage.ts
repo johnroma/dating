@@ -10,39 +10,14 @@ export type StoragePort = {
   variantsBaseUrl(): string; // e.g., '/mock-cdn' or 'https://cdn.example.com'
 };
 
-// Lazy-load adapter to avoid importing non-selected drivers at runtime/test
-type AdapterModule = { storage: StoragePort };
-let cached: Promise<AdapterModule> | null = null;
-function load(): Promise<AdapterModule> {
-  if (!cached) {
-    const useR2 =
-      (process.env.STORAGE_DRIVER || 'local').toLowerCase() === 'r2';
-    cached = (
-      useR2
-        ? import('../adapters/storage/r2')
-        : import('../adapters/storage/local')
-    ) as Promise<AdapterModule>;
+export async function getStorage() {
+  const driver = (process.env.STORAGE_DRIVER ?? 'local').toLowerCase();
+  if (driver === 'r2') {
+    // dynamic import: avoids bundling/evaluating the local adapter on Vercel
+    const mod = await import('@/src/adapters/storage/r2');
+    return mod.storage;
   }
-  return cached;
-}
-
-// Return a thin async-delegating facade
-export function getStorage(): StoragePort {
-  return {
-    putOriginal: async (key, buf) =>
-      (await load()).storage.putOriginal(key, buf),
-    putVariant: async (photoId, size, buf) =>
-      (await load()).storage.putVariant(photoId, size, buf),
-    getOriginalPresignedUrl: async key =>
-      (await load()).storage.getOriginalPresignedUrl(key),
-    deleteAllForPhoto: async (photoId, origKey) =>
-      (await load()).storage.deleteAllForPhoto(photoId, origKey),
-    variantsBaseUrl: () => {
-      // variantsBaseUrl is synchronous, but adapter may not be loaded yet.
-      // It's safe to read env here for base; fallback to adapter when needed.
-      const d = (process.env.STORAGE_DRIVER || 'local').toLowerCase();
-      if (d === 'r2') return process.env.CDN_BASE_URL || '';
-      return process.env.NEXT_PUBLIC_CDN_BASE_URL || '/mock-cdn';
-    },
-  } satisfies StoragePort;
+  // local fallback (dev)
+  const mod = await import('@/src/adapters/storage/local');
+  return mod.storage;
 }

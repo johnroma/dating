@@ -2,25 +2,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 
-export const ROOT = '.data/storage';
-export const ORIG = path.join(ROOT, 'photos-orig');
-export const CDN = path.join(ROOT, 'photos-cdn');
+import { localStorageRoot, localOrigDir, localCdnDir } from '@/src/lib/paths';
 
-function ensureDirs() {
-  for (const p of [ROOT, ORIG, CDN]) {
-    const abs = path.join(process.cwd(), p);
-    if (!fs.existsSync(abs)) fs.mkdirSync(abs, { recursive: true });
-  }
-}
+export const ROOT = localStorageRoot();
+export const ORIG = localOrigDir();
+export const CDN = localCdnDir();
 
-ensureDirs();
+// (No filesystem side effects at module load.)
 
 export function origPath(key: string): string {
-  return path.join(process.cwd(), ORIG, key);
+  return path.join(ORIG, key);
 }
 
 export function variantPath(photoId: string, size: 'sm' | 'md' | 'lg'): string {
-  return path.join(process.cwd(), CDN, photoId, `${size}.webp`);
+  return path.join(CDN, photoId, `${size}.webp`);
 }
 
 export async function writeOriginal(key: string, buf: Buffer): Promise<void> {
