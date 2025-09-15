@@ -68,8 +68,8 @@ it('upload then ingest creates files and DB row', async () => {
   // Check variant files exist
   for (const size of ['sm', 'md', 'lg'] as const) {
     const abs = path.join(
-      process.cwd(),
-      '.data/storage/photos-cdn',
+      localStorageRoot(),
+      'photos-cdn',
       igJson.id,
       `${size}.webp`
     );

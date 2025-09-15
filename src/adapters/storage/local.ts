@@ -3,13 +3,9 @@ import path from 'node:path';
 
 import { localStorageRoot, localOrigDir, localCdnDir } from '@/src/lib/paths';
 import type { StoragePort } from '@/src/ports/storage';
-const ROOT = localStorageRoot();
-const ORIG = localOrigDir();
-const CDN = localCdnDir();
 
-// (No filesystem side effects at module load.)
 export function ensureLocalStorageDirs() {
-  [ROOT, ORIG, CDN].forEach(p => {
+  [localStorageRoot(), localOrigDir(), localCdnDir()].forEach(p => {
     if (!existsSync(p)) mkdirSync(p, { recursive: true });
   });
 }
@@ -27,11 +23,11 @@ async function rmIfExists(absPath: string): Promise<void> {
 }
 
 function origPath(key: string): string {
-  return path.join(ORIG, key);
+  return path.join(localOrigDir(), key);
 }
 
 function variantPath(photoId: string, size: 'sm' | 'md' | 'lg'): string {
-  return path.join(CDN, photoId, `${size}.webp`);
+  return path.join(localCdnDir(), photoId, `${size}.webp`);
 }
 
 async function writeOriginal(key: string, buf: Buffer): Promise<void> {
@@ -71,7 +67,7 @@ export const storage: StoragePort = {
 
   async deleteAllForPhoto(photoId, origKey) {
     const origAbs = origPath(origKey);
-    const variantsDir = path.join(CDN, photoId);
+    const variantsDir = path.join(localCdnDir(), photoId);
     await rmIfExists(origAbs);
     await rmIfExists(variantsDir);
   },

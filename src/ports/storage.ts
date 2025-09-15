@@ -13,11 +13,9 @@ export type StoragePort = {
 export async function getStorage() {
   const driver = (process.env.STORAGE_DRIVER ?? 'local').toLowerCase();
   if (driver === 'r2') {
-    // dynamic import: avoids bundling/evaluating the local adapter on Vercel
     const mod = await import('@/src/adapters/storage/r2');
     return mod.storage;
   }
-  // local fallback (dev)
   const mod = await import('@/src/adapters/storage/local');
   return mod.storage;
 }

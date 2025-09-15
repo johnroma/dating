@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { makeVariants } from '../src/lib/images/resize';
-import { ORIG, ROOT } from '../src/lib/storage/fs';
+import { localStorageRoot } from '../src/lib/paths';
 import sharp from 'sharp';
 
 const TMP_DB = path.join(process.cwd(), '.data/db/test.db');
@@ -27,19 +27,19 @@ beforeAll(async () => {
   process.env.DB_DRIVER = 'sqlite';
   process.env.DATABASE_FILE = TMP_DB;
   // ensure ORIG dir exists
-  const origDir = path.join(process.cwd(), ORIG);
+  const origDir = localStorageRoot();
   fs.mkdirSync(origDir, { recursive: true });
   fs.writeFileSync(path.join(origDir, 'tiny.png'), await makeTinyPng());
 });
 
 afterAll(() => {
   try {
-    fs.rmSync(path.join(process.cwd(), ROOT), { recursive: true, force: true });
+    fs.rmSync(localStorageRoot(), { recursive: true, force: true });
   } catch {}
 });
 
 it('creates webp variants and strips exif', async () => {
-  const origAbs = path.join(process.cwd(), ORIG, 'tiny.png');
+  const origAbs = path.join(localStorageRoot(), 'tiny.png');
   const { sizesJson } = await makeVariants({
     photoId: PHOTO_ID,
     origAbsPath: origAbs,
@@ -49,8 +49,8 @@ it('creates webp variants and strips exif', async () => {
     const p = sizesJson[size];
     expect(p).toMatch(new RegExp(`${PHOTO_ID}/${size}\\.webp$`));
     const abs = path.join(
-      process.cwd(),
-      '.data/storage/photos-cdn',
+      localStorageRoot(),
+      'photos-cdn',
       PHOTO_ID,
       `${size}.webp`
     );

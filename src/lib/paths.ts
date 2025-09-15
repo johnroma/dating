@@ -1,10 +1,8 @@
-// Compute writable locations once.
 import path from 'node:path';
-export const isVercel = !!process.env.VERCEL;
-export const driver = (process.env.STORAGE_DRIVER ?? 'local').toLowerCase();
-export const isLocalDriver = driver === 'local';
 
-// Root we can write to: /tmp on Vercel, repo root locally.
+export const isVercel = !!process.env.VERCEL;
+export const isLocalDriver =
+  (process.env.STORAGE_DRIVER ?? 'local').toLowerCase() === 'local';
 export const writableRoot = () => (isVercel ? '/tmp' : process.cwd());
 
 export const localStorageRoot = () =>

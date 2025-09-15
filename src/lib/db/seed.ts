@@ -6,7 +6,7 @@ async function main() {
   await db.insertPhoto({
     id,
     status: 'PENDING',
-    origkey: `.data/storage/photos-orig/${id}.bin`,
+    origkey: `photos-orig/${id}.bin`,
     sizesjson: {},
     width: null,
     height: null,
