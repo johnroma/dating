@@ -9,6 +9,23 @@ const connectionString = urlRaw
   ? urlRaw.replace(':6543/', ':5432/').replace('/postgrespostgres', '/postgres')
   : urlRaw;
 
+// Remove sslmode=require from connection string as it forces strict validation
+// We'll handle SSL configuration through the ssl object instead
+let finalConnectionString =
+  connectionString?.replace(/[?&]sslmode=require/, '') || connectionString;
+
+// Force strict SSL validation for testing
+if (process.env.FORCE_STRICT_SSL) {
+  finalConnectionString =
+    finalConnectionString?.replace(/sslmode=require/, 'sslmode=verify-full') ||
+    '';
+  // Also try to force an SSL error by using invalid hostname
+  finalConnectionString =
+    finalConnectionString?.replace(/@[^:]+:/, '@invalid-ssl-host:') || '';
+  console.log('Forcing strict SSL with verify-full mode and invalid hostname');
+  console.log('Modified connection string:', finalConnectionString);
+}
+
 // Optional strict TLS: provide CA via env (multi-line PEM or base64)
 const ca =
   process.env.PG_CA_CERT ||
@@ -22,19 +39,30 @@ const noVerify =
   process.env.PGSSL_NO_VERIFY === '1' ||
   process.env.PG_SSL_NO_VERIFY === '1' ||
   /\bsslmode=(?:require|allow|prefer|no-verify)\b/i.test(
-    connectionString || ''
+    finalConnectionString || ''
   );
 
 const ssl = ca
   ? { ca, rejectUnauthorized: true }
   : noVerify
     ? { rejectUnauthorized: false }
-    : process.env.VERCEL
-      ? { rejectUnauthorized: false } // Vercel has stricter SSL validation
-      : undefined; // default verification for local
+    : process.env.FORCE_STRICT_SSL
+      ? { rejectUnauthorized: true } // Force strict SSL for testing
+      : {
+          rejectUnauthorized: false,
+          checkServerIdentity: () => undefined, // Skip hostname verification
+        }; // Always use relaxed SSL validation for Supabase
+
+// Debug logging
+if (process.env.DEBUG_SSL) {
+  console.log('Connection string:', connectionString);
+  console.log('Final connection string:', finalConnectionString);
+  console.log('SSL config:', ssl);
+  console.log('No verify:', noVerify);
+}
 
 const pool = new Pool({
-  connectionString,
+  connectionString: finalConnectionString,
   max: 10, // Maximum number of clients in the pool
   idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
   connectionTimeoutMillis: 10000, // Return an error after 10 seconds if connection could not be established
