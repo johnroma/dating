@@ -29,7 +29,9 @@ const ssl = ca
   ? { ca, rejectUnauthorized: true }
   : noVerify
     ? { rejectUnauthorized: false }
-    : undefined; // default verification
+    : process.env.VERCEL
+      ? { rejectUnauthorized: false } // Vercel has stricter SSL validation
+      : undefined; // default verification for local
 
 const pool = new Pool({
   connectionString,
