@@ -36,10 +36,19 @@ const BUCKET_ORIG = () => required('S3_BUCKET_ORIG');
 const BUCKET_CDN = () => required('S3_BUCKET_CDN');
 const CDN_BASE = () => required('CDN_BASE_URL');
 
-async function streamToBuffer(stream: any): Promise<Buffer> {
+// AWS SDK v3 stream types
+type AwsStream =
+  | Readable
+  | ReadableStream
+  | { arrayBuffer?: () => Promise<ArrayBuffer> };
+
+async function streamToBuffer(
+  stream: AwsStream | null | undefined
+): Promise<Buffer> {
   if (!stream) return Buffer.alloc(0);
-  // AWS SDK v3 returns a web/whatwg ReadableStream in Node 18+; normalize
-  if (typeof (stream as any).pipe === 'function') {
+
+  // Check if it's a Node.js Readable stream
+  if (typeof (stream as Readable).pipe === 'function') {
     const chunks: Buffer[] = [];
     return await new Promise<Buffer>((resolve, reject) => {
       (stream as Readable)
@@ -47,7 +56,10 @@ async function streamToBuffer(stream: any): Promise<Buffer> {
         .on('end', () => resolve(Buffer.concat(chunks)))
         .on('error', reject);
     });
-  } else if (typeof (stream as any).getReader === 'function') {
+  }
+
+  // Check if it's a Web ReadableStream
+  if (typeof (stream as ReadableStream).getReader === 'function') {
     const reader = (stream as ReadableStream).getReader();
     const chunks: Uint8Array[] = [];
     while (true) {
@@ -57,7 +69,13 @@ async function streamToBuffer(stream: any): Promise<Buffer> {
     }
     return Buffer.concat(chunks.map(u => Buffer.from(u)));
   }
-  return Buffer.from((await (stream as any).arrayBuffer?.()) ?? []);
+
+  // Fallback for other stream types with arrayBuffer method
+  const streamWithArrayBuffer = stream as {
+    arrayBuffer?: () => Promise<ArrayBuffer>;
+  };
+  const arrayBuffer = await streamWithArrayBuffer.arrayBuffer?.();
+  return Buffer.from(arrayBuffer ? new Uint8Array(arrayBuffer) : []);
 }
 
 export const storage: StoragePort = {
@@ -117,6 +135,6 @@ export const storage: StoragePort = {
     const Key = `orig/${origKey}`;
     const Bucket = BUCKET_ORIG();
     const res = await client.send(new GetObjectCommand({ Bucket, Key }));
-    return await streamToBuffer(res.Body as any);
+    return await streamToBuffer(res.Body as AwsStream);
   },
 };
