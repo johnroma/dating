@@ -26,6 +26,20 @@ Purpose: short, practical notes kept in sync with code. Optimized for LLMs and h
 
 ---
 
+## Users & Roles (local-first plan)
+
+- Roles we actually use: **user**, **moderator**.
+- All signed-in users are "users" (view approved, upload, delete their own). Moderators can approve/reject any photo (and later delete users).
+- We **do not** use a "pending" stage now. New uploads default to **APPROVED**; moderators may later **REJECT**.
+- Step 1 (SQLite only):
+  - Adds `User` table and seeds two dev accounts: `sqlite-user` (role: user) and `sqlite-moderator` (role: moderator).
+  - Adds `Photo.ownerId` (nullable initially), plus helpful indexes.
+  - Adds a SQLite trigger to default `Photo.status` to `APPROVED` if not provided.
+- Step 2 will replace the role cookie with a dev session cookie and `/dev/login` to pick `sqlite-user` or `sqlite-moderator`.
+- Step 3 will set `ownerId` on upload and add "My photos" + creator public pages.
+
+---
+
 ## Storage Port & Drivers (Step 5)
 
 - Port: `src/ports/storage.ts` → `getStorage()`

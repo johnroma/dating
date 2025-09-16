@@ -1,11 +1,15 @@
 import fs, { mkdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
-import { localStorageRoot, localOrigDir, localCdnDir } from '@/src/lib/paths';
+import {
+  localStorageRoot,
+  localOrigRoot,
+  localCdnRoot,
+} from '@/src/lib/storage/paths';
 import type { StoragePort } from '@/src/ports/storage';
 
 export function ensureLocalStorageDirs() {
-  [localStorageRoot(), localOrigDir(), localCdnDir()].forEach(p => {
+  [localStorageRoot(), localOrigRoot(), localCdnRoot()].forEach(p => {
     if (!existsSync(p)) mkdirSync(p, { recursive: true });
   });
 }
@@ -23,11 +27,11 @@ async function rmIfExists(absPath: string): Promise<void> {
 }
 
 function origPath(key: string): string {
-  return path.join(localOrigDir(), key);
+  return path.join(localOrigRoot(), key);
 }
 
 function variantPath(photoId: string, size: 'sm' | 'md' | 'lg'): string {
-  return path.join(localCdnDir(), photoId, `${size}.webp`);
+  return path.join(localCdnRoot(), photoId, `${size}.webp`);
 }
 
 async function writeOriginal(key: string, buf: Buffer): Promise<void> {
@@ -67,7 +71,7 @@ export const storage: StoragePort = {
 
   async deleteAllForPhoto(photoId, origKey) {
     const origAbs = origPath(origKey);
-    const variantsDir = path.join(localCdnDir(), photoId);
+    const variantsDir = path.join(localCdnRoot(), photoId);
     await rmIfExists(origAbs);
     await rmIfExists(variantsDir);
   },
@@ -77,7 +81,7 @@ export const storage: StoragePort = {
   },
 
   async readOriginalBuffer(origKey: string): Promise<Buffer> {
-    const p = path.join(localOrigDir(), origKey);
+    const p = path.join(localOrigRoot(), origKey);
     return await fs.promises.readFile(p);
   },
 };

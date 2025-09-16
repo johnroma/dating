@@ -3,6 +3,8 @@
  */
 import { NextResponse } from 'next/server';
 
+import { localCdnRoot } from '@/src/lib/storage/paths';
+
 export const dynamic = 'force-dynamic';
 // At build time, Next inlines process.env.*; the unused branch is dead-code-eliminated.
 // Note: Next requires segment config to be static. Use Node runtime
@@ -24,7 +26,6 @@ export async function GET(
   // LOCAL DEV: stream the prebuilt WebP from disk (no sharp).
   const { join } = await import('node:path');
   const { createReadStream, statSync } = await import('node:fs');
-  const { Readable } = await import('node:stream');
 
   const { path: segs } = await ctx.params;
   const [photoId, file] = [segs?.[0], segs?.[1]]; // e.g. sm.webp | md.webp | lg.webp
@@ -59,26 +60,45 @@ export async function GET(
     // If anything goes wrong enforcing, fall through to 404/serve from disk
   }
 
-  const abs = join(
-    process.cwd(),
-    '.data',
-    'storage',
-    'photos-cdn',
-    photoId,
-    file
-  );
+  const root = localCdnRoot();
+  const abs = join(root, photoId, file);
   try {
     const st = statSync(abs);
     const nodeStream = createReadStream(abs);
-    const webStream = Readable.toWeb(nodeStream) as unknown as ReadableStream;
-    return new NextResponse(webStream, {
+
+    // Convert Node.js ReadStream to web-compatible ReadableStream
+    const webStream = new ReadableStream({
+      start(controller) {
+        nodeStream.on('data', chunk => controller.enqueue(chunk));
+        nodeStream.on('end', () => controller.close());
+        nodeStream.on('error', error => controller.error(error));
+      },
+      cancel() {
+        nodeStream.destroy();
+      },
+    });
+
+    const res = new NextResponse(webStream, {
       headers: {
         'Content-Type': 'image/webp',
         'Content-Length': String(st.size),
         'Cache-Control': 'public, max-age=31536000, immutable',
       },
     });
+    if (process.env.DEBUG_MOCK_CDN === '1') {
+      res.headers.set('x-cdn-root', root);
+      res.headers.set('x-cdn-abs', abs);
+      res.headers.set('x-cdn-exists', '1');
+    }
+
+    return res;
   } catch {
-    return new NextResponse(null, { status: 404 });
+    const res = new NextResponse(null, { status: 404 });
+    if (process.env.DEBUG_MOCK_CDN === '1') {
+      res.headers.set('x-cdn-root', root);
+      res.headers.set('x-cdn-abs', abs);
+      res.headers.set('x-cdn-exists', '0');
+    }
+    return res;
   }
 }
