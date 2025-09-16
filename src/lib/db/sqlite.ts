@@ -3,6 +3,8 @@ import path from 'node:path';
 
 import Database from 'better-sqlite3';
 
+import { ensureSqliteSchema } from '@/src/lib/db/ensure-sqlite';
+
 import type { DbPort } from './port';
 import type { Photo, PhotoStatus } from './types';
 
@@ -65,6 +67,11 @@ function getConn() {
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_photo_deleted ON photo(deletedat);
   `);
+  try {
+    ensureSqliteSchema(db);
+  } catch (e) {
+    console.error('[sqlite ensure schema] error:', e);
+  }
   return db;
 }
 
