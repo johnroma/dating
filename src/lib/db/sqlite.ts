@@ -8,6 +8,14 @@ import { ensureSqliteSchema } from '@/src/lib/db/ensure-sqlite';
 import type { DbPort } from './port';
 import type { Photo, PhotoStatus } from './types';
 
+// Simple sql template literal for ESLint sql plugin
+const sql = (strings: TemplateStringsArray, ...values: any[]) => {
+  return strings.reduce(
+    (result, string, i) => result + string + (values[i] ?? ''),
+    ''
+  );
+};
+
 // On Vercel builds, prevent accidental import of sqlite adapter when not selected
 if (
   process.env.VERCEL &&
@@ -78,7 +86,7 @@ function getConn() {
 const conn = getConn();
 
 const stmtInsert = conn.prepare(
-  'INSERT INTO photo (id, status, origkey, sizesjson, width, height, createdat, updatedat, rejectionreason, phash, duplicateof) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  'INSERT INTO photo (id, status, origkey, sizesjson, width, height, createdat, updatedat, rejectionreason, phash, duplicateof, ownerid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
 );
 
 const stmtUpdateSizes = conn.prepare(
@@ -88,14 +96,10 @@ const stmtUpdateSizes = conn.prepare(
 const stmtSetStatus = conn.prepare(
   'UPDATE photo SET status = ?, rejectionreason = COALESCE(?, rejectionreason), updatedat = ? WHERE id = ?'
 );
-const stmtSoftDelete = conn.prepare(
-  'UPDATE photo SET deletedat = ?, updatedat = ? WHERE id = ?'
-);
 const stmtRestore = conn.prepare(
   'UPDATE photo SET deletedat = NULL, updatedat = ? WHERE id = ?'
 );
 const stmtDelete = conn.prepare('DELETE FROM photo WHERE id = ?');
-const stmtGet = conn.prepare('SELECT * FROM photo WHERE id = ?');
 const stmtGetByOrig = conn.prepare(
   'SELECT * FROM photo WHERE origkey = ? LIMIT 1'
 );
@@ -131,6 +135,7 @@ function mapRow(row: unknown): Photo | undefined {
     rejectionreason:
       (r['rejectionreason'] as string | null | undefined) ?? null,
     deletedat: (r['deletedat'] as string | null | undefined) ?? null,
+    ownerid: (r['ownerid'] as string | null | undefined) ?? null,
   };
 }
 
@@ -146,7 +151,8 @@ export const insertPhoto: DbPort['insertPhoto'] = p => {
     p.updatedat ?? p.createdat,
     p.rejectionreason ?? null,
     p.phash ?? null,
-    p.duplicateof ?? null
+    p.duplicateof ?? null,
+    p.ownerid ?? null
   );
 };
 
@@ -174,19 +180,9 @@ export const deletePhoto: DbPort['deletePhoto'] = id => {
   stmtDelete.run(id);
 };
 
-export const softDeletePhoto: NonNullable<DbPort['softDeletePhoto']> = id => {
-  const now = new Date().toISOString();
-  stmtSoftDelete.run(now, now, id);
-};
-
 export const restorePhoto: NonNullable<DbPort['restorePhoto']> = id => {
   const now = new Date().toISOString();
   stmtRestore.run(now, id);
-};
-
-export const getPhoto: DbPort['getPhoto'] = id => {
-  const row = stmtGet.get(id);
-  return mapRow(row);
 };
 
 export const getByOrigKey: DbPort['getByOrigKey'] = origkey => {
@@ -223,17 +219,37 @@ export function insertAudit(a: {
   );
 }
 
-export const listApproved: DbPort['listApproved'] = (
-  limit = 50,
-  offset = 0
-) => {
-  const rows = conn
+export function listApproved(limit = 60, offset = 0) {
+  const db = getConn() as any;
+  const rows = db
     .prepare(
-      'SELECT * FROM photo WHERE status = ? ORDER BY createdat DESC LIMIT ? OFFSET ?'
+      `
+    SELECT
+      id,
+      status,
+      sizesjson,
+      origkey,
+      width,
+      height,
+      createdat,
+      phash,
+      duplicateof,
+      ownerid,
+      deletedat
+    FROM Photo
+    WHERE status = 'APPROVED'
+      AND deletedat IS NULL
+    ORDER BY datetime(createdat) DESC
+    LIMIT ? OFFSET ?
+  `
     )
-    .all('APPROVED', limit, offset);
-  return rows.map(mapRow).filter(Boolean) as Photo[];
-};
+    .all(limit, offset) as any[];
+  return rows.map(r => ({
+    ...r,
+    sizesjson:
+      typeof r.sizesjson === 'string' ? JSON.parse(r.sizesjson) : r.sizesjson,
+  }));
+}
 
 export const listPending: DbPort['listPending'] = (limit = 50, offset = 0) => {
   const rows = conn
@@ -264,3 +280,112 @@ export const countPending: DbPort['countPending'] = () => {
     .get('PENDING') as { c: number } | undefined;
   return Number(row?.c ?? 0);
 };
+
+export function listPhotosByOwner(ownerId: string) {
+  const db = getConn() as any;
+  const rows = db
+    .prepare(
+      `
+    SELECT
+      id,
+      status,
+      sizesjson,
+      origkey,
+      width,
+      height,
+      createdat,
+      phash,
+      duplicateof,
+      ownerid,
+      deletedat
+    FROM Photo
+    WHERE ownerid = ?
+      AND status = 'APPROVED'
+      AND deletedat IS NULL
+    ORDER BY datetime(createdat) DESC
+  `
+    )
+    .all(ownerId) as any[];
+  return rows.map(r => ({
+    ...r,
+    sizesjson:
+      typeof r.sizesjson === 'string' ? JSON.parse(r.sizesjson) : r.sizesjson,
+  }));
+}
+
+// Dev-only helper for /dev/login (keeps DbPort unchanged)
+export function listUsers(): {
+  id: string;
+  displayName: string;
+  role: 'user' | 'moderator';
+}[] {
+  try {
+    const rows = conn
+      .prepare(
+        'SELECT id, displayname, role FROM user WHERE deletedat IS NULL ORDER BY role DESC, displayname ASC'
+      )
+      .all() as {
+      id: string;
+      displayname: string;
+      role: 'user' | 'moderator';
+    }[];
+    return (rows || []).map(row => ({
+      id: row.id,
+      displayName: row.displayname,
+      role: row.role,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export function getPhoto(id: string) {
+  const db = getConn() as any;
+  const r = db
+    .prepare(
+      `
+    SELECT
+      id,
+      status,
+      sizesjson,
+      origkey,
+      width,
+      height,
+      createdat,
+      phash,
+      duplicateof,
+      ownerid,
+      deletedat,
+      rejectionreason,
+      updatedat
+    FROM Photo
+    WHERE id = ? LIMIT 1
+  `
+    )
+    .get(id) as any;
+  if (!r) return undefined;
+  return {
+    ...r,
+    sizesjson:
+      typeof r.sizesjson === 'string' ? JSON.parse(r.sizesjson) : r.sizesjson,
+  };
+}
+
+export function softDeletePhoto(id: string) {
+  const db = getConn() as any;
+  const now = new Date().toISOString();
+  db.prepare(
+    sql`UPDATE Photo SET deletedat = ? WHERE id = ? AND deletedat IS NULL`
+  ).run(now, id);
+}
+
+export function updatePhotoStatus(
+  id: string,
+  status: 'APPROVED' | 'REJECTED',
+  reason: string | null = null
+) {
+  const db = getConn() as any;
+  db.prepare(
+    sql`UPDATE Photo SET status = ?, rejectionreason = ?, updatedat = ? WHERE id = ? AND deletedat IS NULL`
+  ).run(status, reason, new Date().toISOString(), id);
+}

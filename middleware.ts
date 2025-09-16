@@ -1,62 +1,73 @@
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
+import { COOKIE_NAME } from '@/src/lib/role-cookie';
 import { parseRole } from '@/src/lib/roles';
 
-function buildRedirectURL(req: NextRequest, reason: string) {
-  const url = req.nextUrl.clone();
-  url.pathname = '/dev/role';
-  url.searchParams.set('reason', reason);
-  url.searchParams.set('from', req.nextUrl.pathname);
-  return url;
+// Lightweight parse of sess cookie (no HMAC verify in middleware to keep edge-friendly)
+function parseSessCookie(
+  req: NextRequest
+): { role: 'user' | 'moderator' } | null {
+  const cookie = req.cookies.get('sess')?.value;
+  if (!cookie) return null;
+  const [payload] = cookie.split('.');
+  if (!payload) return null;
+  try {
+    const json = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (json && (json.role === 'user' || json.role === 'moderator')) {
+      return { role: json.role };
+    }
+  } catch {
+    // ignore malformed cookies
+  }
+  return null;
 }
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const role = parseRole(req.cookies.get('role')?.value);
+  const sess = parseSessCookie(req); // new
+  const legacy = req.cookies.get(COOKIE_NAME)?.value || ''; // old
+  const roleLegacy = parseRole(legacy);
 
-  // Protect /upload
-  if (pathname === '/upload' || pathname.startsWith('/upload/')) {
-    if (!(role === 'creator' || role === 'moderator')) {
-      const noredirect = req.nextUrl.searchParams.get('noredirect') === '1';
-      if (noredirect) {
-        const url = req.nextUrl.clone();
-        url.pathname = '/403';
-        url.searchParams.set('reason', 'forbidden');
-        url.searchParams.set('from', req.nextUrl.pathname);
-        const res = NextResponse.rewrite(url);
-        res.headers.set('x-role', role);
-        return res;
-      }
-      const res = NextResponse.redirect(buildRedirectURL(req, 'forbidden'));
-      res.headers.set('x-role', role);
-      return res;
+  // public paths
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api/mock') ||
+    pathname.startsWith('/mock-cdn')
+  ) {
+    return NextResponse.next();
+  }
+  if (pathname.startsWith('/dev/login')) return NextResponse.next();
+
+  // /upload : allow user or moderator (new), or creator/moderator (legacy)
+  if (pathname.startsWith('/upload')) {
+    if (
+      sess?.role === 'user' ||
+      sess?.role === 'moderator' ||
+      roleLegacy === 'creator' ||
+      roleLegacy === 'moderator'
+    ) {
+      return NextResponse.next();
     }
+    const url = req.nextUrl.clone();
+    url.pathname = '/dev/login';
+    url.searchParams.set('from', pathname);
+    return NextResponse.redirect(url);
   }
 
-  // Protect /moderate
-  if (pathname === '/moderate' || pathname.startsWith('/moderate/')) {
-    if (role !== 'moderator') {
-      const noredirect = req.nextUrl.searchParams.get('noredirect') === '1';
-      if (noredirect) {
-        const url = req.nextUrl.clone();
-        url.pathname = '/403';
-        url.searchParams.set('reason', 'forbidden');
-        url.searchParams.set('from', req.nextUrl.pathname);
-        const res = NextResponse.rewrite(url);
-        res.headers.set('x-role', role);
-        return res;
-      }
-      const res = NextResponse.redirect(buildRedirectURL(req, 'forbidden'));
-      res.headers.set('x-role', role);
-      return res;
-    }
+  // /moderate : allow only moderator
+  if (pathname.startsWith('/moderate')) {
+    if (sess?.role === 'moderator' || roleLegacy === 'moderator')
+      return NextResponse.next();
+    const url = req.nextUrl.clone();
+    url.pathname = '/dev/login';
+    url.searchParams.set('from', pathname);
+    return NextResponse.redirect(url);
   }
 
-  const res = NextResponse.next();
-  res.headers.set('x-role', role);
-  return res;
+  return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/upload/:path*', '/moderate/:path*'],
+  matcher: ['/upload/:path*', '/moderate/:path*', '/((?!_next|mock-cdn).*)'],
 };

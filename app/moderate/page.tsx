@@ -2,25 +2,29 @@ import Link from 'next/link';
 
 import { getDb } from '@/src/lib/db';
 
-import { rejectPhoto, restorePhoto } from './actions';
+import { setPhotoStatus } from '../mod/actions';
 
 export default async function ModeratePage() {
   const db = getDb();
   const items = await db.listRecent(200, 0);
 
-  async function rejectAction(formData: FormData) {
-    'use server';
-    const id = String(formData.get('id'));
-    const reason = formData.get('reason')
-      ? String(formData.get('reason'))
-      : undefined;
-    await rejectPhoto(id, reason);
-  }
-
   async function restoreAction(formData: FormData) {
     'use server';
     const id = String(formData.get('id'));
-    await restorePhoto(id);
+    await setPhotoStatus(id, 'APPROVED');
+  }
+
+  async function approveAction(formData: FormData) {
+    'use server';
+    const id = String(formData.get('id'));
+    await setPhotoStatus(id, 'APPROVED');
+  }
+
+  async function rejectAction(formData: FormData) {
+    'use server';
+    const id = String(formData.get('id'));
+    const reason = String(formData.get('reason') || '');
+    await setPhotoStatus(id, 'REJECTED', reason || null);
   }
 
   return (
@@ -49,30 +53,59 @@ export default async function ModeratePage() {
                 className='h-48 w-full object-cover'
               />
             </div>
-            <form action={rejectAction} className='flex items-center gap-2'>
-              <input type='hidden' name='id' value={p.id} />
-              <input
-                type='text'
-                name='reason'
-                placeholder='Rejection reason (optional)'
-                className='flex-1 rounded border px-2 py-1 text-sm'
-                defaultValue={p.rejectionreason || ''}
-              />
-              <button
-                className='rounded border bg-red-50 px-2 py-1 text-sm'
-                disabled={p.status === 'REJECTED'}
-              >
-                Reject
-              </button>
-            </form>
-            {p.status === 'REJECTED' && (
-              <form action={restoreAction} className='mt-2'>
+            <div className='space-y-2'>
+              {/* Approve/Reject buttons */}
+              <div className='flex gap-2'>
+                <form action={approveAction} className='flex-1'>
+                  <input type='hidden' name='id' value={p.id} />
+                  <button
+                    type='submit'
+                    className='w-full rounded border bg-green-50 px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-100 disabled:opacity-50 disabled:cursor-not-allowed'
+                    disabled={p.status === 'APPROVED'}
+                  >
+                    {p.status === 'APPROVED' ? 'Approved' : 'Approve'}
+                  </button>
+                </form>
+                <form action={rejectAction} className='flex-1'>
+                  <input type='hidden' name='id' value={p.id} />
+                  <button
+                    type='submit'
+                    className='w-full rounded border bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed'
+                    disabled={p.status === 'REJECTED'}
+                  >
+                    {p.status === 'REJECTED' ? 'Rejected' : 'Reject'}
+                  </button>
+                </form>
+              </div>
+
+              {/* Rejection reason input */}
+              <form action={rejectAction}>
                 <input type='hidden' name='id' value={p.id} />
-                <button className='rounded border bg-green-50 px-2 py-1 text-sm'>
-                  Restore
+                <input
+                  type='text'
+                  name='reason'
+                  placeholder='Rejection reason (optional)'
+                  className='w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500'
+                  defaultValue={p.rejectionreason || ''}
+                />
+                <button
+                  type='submit'
+                  className='mt-1 w-full rounded border bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100'
+                >
+                  Reject with Reason
                 </button>
               </form>
-            )}
+
+              {/* Restore button for rejected items */}
+              {p.status === 'REJECTED' && (
+                <form action={restoreAction}>
+                  <input type='hidden' name='id' value={p.id} />
+                  <button className='w-full rounded border bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100'>
+                    Restore
+                  </button>
+                </form>
+              )}
+            </div>
           </div>
         ))}
       </div>

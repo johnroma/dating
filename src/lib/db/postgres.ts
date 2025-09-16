@@ -105,6 +105,7 @@ function rowToPhoto(row: Record<string, unknown>): Photo {
     deletedat: row['deletedat']
       ? new Date(String(row['deletedat'])).toISOString()
       : null,
+    ownerid: row['ownerid'] ? String(row['ownerid']) : null,
   };
 }
 
@@ -268,6 +269,36 @@ export async function insertAudit(a: {
     'INSERT INTO auditlog(id, photoid, action, actor, reason, at) VALUES ($1,$2,$3,$4,$5,$6)',
     [a.id, a.photoid, a.action, a.actor, a.reason ?? null, a.at]
   );
+}
+
+// Dev-only helper for /dev/login. Safe even if the User table isn't present yet.
+export async function listUsers(): Promise<
+  {
+    id: string;
+    displayName: string;
+    role: 'user' | 'moderator';
+  }[]
+> {
+  try {
+    const res = await pool.query(
+      'SELECT id, displayname, role FROM users WHERE deletedat IS NULL ORDER BY role DESC, displayname ASC'
+    );
+    return (res?.rows || []).map(row => ({
+      id: String(row.id),
+      displayName: String(
+        row.displayname ?? row.displayName ?? row.display_name ?? ''
+      ),
+      role: row.role as 'user' | 'moderator',
+    }));
+  } catch {
+    return [];
+  }
+}
+
+// Owner-scoped listing (stub until Postgres migration adds ownerid column)
+export async function listPhotosByOwner(ownerId: string): Promise<Photo[]> {
+  void ownerId;
+  return [];
 }
 
 // Graceful shutdown

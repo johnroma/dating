@@ -15,7 +15,8 @@ export default async function PhotoPage({
   const db = getDb();
   const role = await getRoleFromCookies();
   const photo = await db.getPhoto(id);
-  if (!photo) {
+  // snake_case: deletedat
+  if (!photo || photo.deletedat) {
     return (
       <main className='mx-auto max-w-3xl p-6'>
         <p className='text-sm text-gray-600'>Photo not found.</p>

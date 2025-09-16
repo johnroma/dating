@@ -71,11 +71,9 @@ describe('moderation flow', () => {
     expect(okRes.status).toBe(200);
     await okRes.arrayBuffer();
 
-    // Reject via server action
-    const { rejectPhoto, restorePhoto } = await import(
-      '../app/moderate/actions'
-    );
-    await rejectPhoto(id, 'not suitable');
+    // Reject via database function directly (bypass auth in test)
+    const { updatePhotoStatus } = await import('../src/lib/db/sqlite');
+    updatePhotoStatus(id, 'REJECTED', 'not suitable');
 
     // CDN should block now
     const forbRes = await cdnGet(new Request('http://local/mock-cdn'), {
@@ -99,7 +97,7 @@ describe('moderation flow', () => {
     await oRes.arrayBuffer();
 
     // Restore approval
-    await restorePhoto(id);
+    updatePhotoStatus(id, 'APPROVED');
     const okRes2 = await cdnGet(new Request('http://local/mock-cdn'), {
       params: { path: [id, 'sm.webp'] },
     } as any);

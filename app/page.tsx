@@ -25,25 +25,29 @@ async function Gallery() {
           No photos yet. Upload one to get started.
         </div>
       ) : null}
-      {photos.map(p => (
-        <Link key={p.id} href={`/p/${p.id}`} className='block'>
-          <div className='relative overflow-hidden rounded'>
-            <Image
-              src={p.sizesjson?.sm || `${CDN_BASE}/${p.id}/sm.webp`}
-              alt={p.id}
-              width={512}
-              height={384}
-              className='h-40 w-full object-cover'
-              unoptimized={unopt}
-            />
-            {isModerator ? (
-              <span className='absolute left-2 top-2 rounded bg-white/85 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-800'>
-                {p.status}
-              </span>
-            ) : null}
-          </div>
-        </Link>
-      ))}
+      {photos.map(p => {
+        const src = p?.sizesjson?.md || p?.sizesjson?.sm || p?.sizesjson?.lg;
+        if (!src) return null;
+        return (
+          <Link key={p.id} href={`/p/${p.id}`} className='block'>
+            <div className='relative overflow-hidden rounded'>
+              <Image
+                src={src}
+                alt={p.id}
+                width={512}
+                height={384}
+                className='h-40 w-full object-cover'
+                unoptimized={unopt}
+              />
+              {isModerator ? (
+                <span className='absolute left-2 top-2 rounded bg-white/85 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-800'>
+                  {p.status}
+                </span>
+              ) : null}
+            </div>
+          </Link>
+        );
+      })}
     </div>
   );
 }

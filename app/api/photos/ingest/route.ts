@@ -11,8 +11,7 @@ import { findDuplicateByHash } from '@/src/lib/images/dupes';
 import { SIZES } from '@/src/lib/images/resize';
 import { enforceQuotaOrThrow, getRoleQuota, getUsage } from '@/src/lib/quotas';
 import { ipFromHeaders, limit } from '@/src/lib/rate/limiter';
-import { COOKIE_NAME } from '@/src/lib/role-cookie';
-import { parseRole, type Role } from '@/src/lib/roles';
+import { getSession } from '@/src/ports/auth';
 import { getStorage } from '@/src/ports/storage';
 
 const LIMIT_INGESTS = Number(process.env.RATE_INGESTS_PER_MINUTE || 60);
@@ -36,14 +35,12 @@ export async function POST(req: Request) {
   };
   if (!key) return NextResponse.json({ error: 'missing_key' }, { status: 400 });
 
-  // Determine actor role via cookie header for quotas/audit
+  // Determine actor role via dev session (no legacy cookie)
   const db = getDb();
-  const cookieHeader = req.headers.get('cookie') || '';
-  const roleCookie = cookieHeader
-    .split(/;\s*/)
-    .map(kv => kv.split('='))
-    .find(([k]) => k === COOKIE_NAME)?.[1];
-  const role = parseRole(roleCookie) as Role;
+  const roleSession = await getSession().catch(() => null);
+  const role = (roleSession?.role === 'moderator' ? 'moderator' : 'creator') as
+    | 'creator'
+    | 'moderator';
 
   // Step 7 idempotency (by explicit key or implicit key:<origKey>)
   const idem = idempotencyKey || `key:${key}`;
@@ -118,6 +115,8 @@ export async function POST(req: Request) {
   const duplicateOf = pHash ? await findDuplicateByHash(pHash) : undefined;
 
   const storage = await getStorage();
+  const sess = await getSession().catch(() => null);
+  const ownerId = sess?.userId ?? null;
   const photoId = candidateId; // deterministic id for idempotency
 
   // Read original file via storage adapter (works for both local and R2)
@@ -176,6 +175,7 @@ export async function POST(req: Request) {
     createdat: new Date().toISOString(),
     phash: pHash || null,
     duplicateof: duplicateOf || null,
+    ownerid: ownerId,
   });
 
   // Audit

@@ -33,6 +33,33 @@ export function ensureSqliteSchema(db: Database.Database) {
     ).run();
   }
 
+  // Add photo.deletedat if missing (for soft deletes)
+  if (!columnExists(db, 'photo', 'deletedat')) {
+    db.prepare(
+      `
+      ALTER TABLE photo ADD COLUMN deletedat TEXT NULL
+    `
+    ).run();
+  }
+
+  // Add photo.rejectionreason if missing (for moderation)
+  if (!columnExists(db, 'photo', 'rejectionreason')) {
+    db.prepare(
+      `
+      ALTER TABLE photo ADD COLUMN rejectionreason TEXT NULL
+    `
+    ).run();
+  }
+
+  // Add photo.updatedat if missing (for tracking updates)
+  if (!columnExists(db, 'photo', 'updatedat')) {
+    db.prepare(
+      `
+      ALTER TABLE photo ADD COLUMN updatedat TEXT NULL
+    `
+    ).run();
+  }
+
   // Helpful indexes
   db.prepare(
     `

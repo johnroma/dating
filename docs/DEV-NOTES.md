@@ -35,7 +35,9 @@ Purpose: short, practical notes kept in sync with code. Optimized for LLMs and h
   - Adds `User` table and seeds two dev accounts: `sqlite-user` (role: user) and `sqlite-moderator` (role: moderator).
   - Adds `Photo.ownerId` (nullable initially), plus helpful indexes.
   - Adds a SQLite trigger to default `Photo.status` to `APPROVED` if not provided.
-- Step 2 will replace the role cookie with a dev session cookie and `/dev/login` to pick `sqlite-user` or `sqlite-moderator`.
+- Step 2 (this patch): dev sessions via signed `sess` cookie. `/dev/login` lets you switch between `sqlite-user` (maps to legacy creator) and `sqlite-moderator` (legacy moderator).
+- Middleware now prefers the session role; still accepts the old role cookie to keep ingest/quotas working. We set both on login.
+- Header shows current session role and a link to `/dev/login`.
 - Step 3 will set `ownerId` on upload and add "My photos" + creator public pages.
 
 ---
@@ -80,9 +82,9 @@ Purpose: short, practical notes kept in sync with code. Optimized for LLMs and h
   - Generates 3 WebP variants and uploads via storage driver (and copies original to R2 in R2 mode).
   - Inserts row with `status: 'APPROVED'` and writes an `AuditLog: 'INGESTED'`.
 - **Soft delete / restore / hard delete** (moderator only)
-  - `POST /api/photos/[id]/soft-delete` → sets `deletedAt` (hidden from gallery/CDN; originals blocked)
-  - `POST /api/photos/[id]/restore` → clears `deletedAt`
-  - `DELETE /api/photos/[id]` → calls `storage.deleteAllForPhoto` then removes DB row; writes `AuditLog: 'DELETED'`
+  - Server action `softDeletePhoto(id)` → sets `deletedAt` (hidden from gallery/CDN; originals blocked)
+  - Server action `setPhotoStatus(id, 'APPROVED')` → clears `deletedAt`
+  - Server action `deletePhoto(id)` → calls `storage.deleteAllForPhoto` then removes DB row; writes `AuditLog: 'DELETED'`
   - `/mock-cdn/**` refuses when `deletedAt` is set; moderators can still view non-approved (but not deleted).
 - **Tables & columns**
   - `Photo`: `id, status, origKey, sizesJson, width, height, createdAt`
@@ -99,9 +101,7 @@ Purpose: short, practical notes kept in sync with code. Optimized for LLMs and h
 
 - `POST /api/ut/upload` (multipart `file`) → `{ key, pHash }`
 - `POST /api/photos/ingest` → `{ id, status, sizes, duplicateOf? }`
-- `POST /api/photos/[id]/soft-delete` → `{ ok: true }` (moderator)
-- `POST /api/photos/[id]/restore` → `{ ok: true }` (moderator)
-- `DELETE /api/photos/[id]` → `{ ok: true }` (moderator)
+- Server actions: `approvePhoto(id)`, `rejectPhoto(id, formData)`, `setPhotoStatus(id, status, reason)`, `softDeletePhoto(id)`, `deletePhoto(id)`
 - `GET /mock-cdn/<id>/<size>.webp` → WebP bytes (410 in R2 mode; 403 when blocked)
 - `GET /mod/original/[id]` → stream (local) or 302 to presigned (R2); moderator only.
 
