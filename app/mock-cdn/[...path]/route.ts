@@ -38,13 +38,6 @@ export async function GET(
     const [{ getDb }] = await Promise.all([import('@/src/lib/db')]);
     const db = getDb();
     const photo = await db.getPhoto(photoId);
-
-    // Debug logging
-    console.log('DEBUG: photoId:', photoId);
-    console.log('DEBUG: photo:', photo);
-    console.log('DEBUG: photo status:', photo?.status);
-    console.log('DEBUG: photo deletedat:', photo?.deletedat);
-
     // Parse sess cookie from raw header (no HMAC verify here)
     const cookie = _req.headers.get('cookie') || '';
     const sessRaw = cookie
@@ -65,29 +58,14 @@ export async function GET(
         }
       }
     }
-
-    console.log('DEBUG: isModerator:', isModerator);
-    console.log('DEBUG: cookie:', cookie);
-
     if (
       !photo ||
       photo.deletedat ||
       (photo.status !== 'APPROVED' && !isModerator)
     ) {
-      console.log(
-        'DEBUG: Returning 403 - photo:',
-        !!photo,
-        'deletedat:',
-        photo?.deletedat,
-        'status:',
-        photo?.status,
-        'isModerator:',
-        isModerator
-      );
       return NextResponse.json({ error: 'forbidden' }, { status: 403 });
     }
-  } catch (error) {
-    console.log('DEBUG: Error in access control:', error);
+  } catch {
     // If anything goes wrong enforcing, fall through to 404/serve from disk
   }
 
