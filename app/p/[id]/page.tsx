@@ -3,7 +3,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 
 import { getDb } from '@/src/lib/db';
-import { getRoleFromCookies } from '@/src/lib/role-cookie';
+import { getSession } from '@/src/ports/auth';
 
 export default async function PhotoPage({
   params,
@@ -13,7 +13,7 @@ export default async function PhotoPage({
   noStore();
   const { id } = await params;
   const db = getDb();
-  const role = await getRoleFromCookies();
+  const sess = await getSession().catch(() => null);
   const photo = await db.getPhoto(id);
   // snake_case: deletedat
   if (!photo || photo.deletedat) {
@@ -37,7 +37,7 @@ export default async function PhotoPage({
         <Link className='underline' href='/'>
           ← Back to gallery
         </Link>
-        {role === 'moderator' ? (
+        {sess?.role === 'moderator' ? (
           <Link className='underline' href={`/mod/original/${photo.id}`}>
             Inspect original
           </Link>

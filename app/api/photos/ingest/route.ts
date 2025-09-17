@@ -35,12 +35,10 @@ export async function POST(req: Request) {
   };
   if (!key) return NextResponse.json({ error: 'missing_key' }, { status: 400 });
 
-  // Determine actor role via dev session (no legacy cookie)
+  // Determine actor role via dev session (session-only; no legacy role cookie)
   const db = getDb();
-  const roleSession = await getSession().catch(() => null);
-  const role = (roleSession?.role === 'moderator' ? 'moderator' : 'creator') as
-    | 'creator'
-    | 'moderator';
+  const sess = await getSession().catch(() => null);
+  const session_role = sess?.role === 'moderator' ? 'moderator' : 'user';
 
   // Step 7 idempotency (by explicit key or implicit key:<origKey>)
   const idem = idempotencyKey || `key:${key}`;
@@ -98,11 +96,12 @@ export async function POST(req: Request) {
     // ignore ingest key upsert errors
   }
 
-  // role-based quotas using cookie role from Request headers (avoid Next dynamic API in tests)
-  const quota = getRoleQuota(role);
+  // Temporary mapping: quotas still accept 'creator'|'moderator'
+  const quota_role = session_role === 'moderator' ? 'moderator' : 'creator';
+  const quota = getRoleQuota(quota_role as 'creator' | 'moderator');
   const usage = await getUsage();
   try {
-    enforceQuotaOrThrow(role, usage, quota);
+    enforceQuotaOrThrow(quota_role as 'creator' | 'moderator', usage, quota);
   } catch (e: unknown) {
     const error = e as Error & { code?: string };
     return NextResponse.json(
@@ -111,11 +110,20 @@ export async function POST(req: Request) {
     );
   }
 
-  // optional duplicate detection (stub)
+  // Duplicate detection
   const duplicateOf = pHash ? await findDuplicateByHash(pHash) : undefined;
 
+  // If this is a duplicate, return early without uploading
+  if (duplicateOf) {
+    return NextResponse.json({
+      id: candidateId,
+      status: 'DUPLICATE',
+      sizes: {},
+      duplicateOf,
+    });
+  }
+
   const storage = await getStorage();
-  const sess = await getSession().catch(() => null);
   const ownerId = sess?.userId ?? null;
   const photoId = candidateId; // deterministic id for idempotency
 
@@ -174,7 +182,7 @@ export async function POST(req: Request) {
     height,
     createdat: new Date().toISOString(),
     phash: pHash || null,
-    duplicateof: duplicateOf || null,
+    duplicateof: null, // No longer needed since we prevent duplicates
     ownerid: ownerId,
   });
 
@@ -185,7 +193,7 @@ export async function POST(req: Request) {
       id: crypto.randomUUID(),
       photoid: photoId,
       action: 'INGESTED',
-      actor: String(role),
+      actor: String(quota_role),
       reason: null as string | null,
       at: new Date().toISOString(),
     };
@@ -204,6 +212,5 @@ export async function POST(req: Request) {
     id: photoId,
     status: 'APPROVED',
     sizes: sizesjson,
-    duplicateOf: duplicateOf || null,
   });
 }

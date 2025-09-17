@@ -7,12 +7,12 @@ Purpose: short, practical notes kept in sync with code. Optimized for LLMs and h
 - **Roles & gating**
   - Types: `Role = 'viewer' | 'creator' | 'moderator'` in `src/lib/roles.ts`.
   - Middleware (`middleware.ts`) protects routes:
-    - `/upload/**` → `creator|moderator`
+    - `/upload/**` → `user|moderator`
     - `/moderate/**` → `moderator`
-    - On block: redirect to `/dev/role?reason=forbidden&from=…`, or rewrite to `/403` if `?noredirect=1`. Always sets `x-role` response header for debug.
-- **Role UX**
-  - `/dev/role` (Server) + `components/RoleSwitcher.tsx` (Client) set a non-HttpOnly `role` cookie via server action.
-  - Header shows current role with a link to switcher; `app/403` explains why access was denied.
+    - On block: redirect to `/dev/login?from=…`. Always sets `x-role` response header for debug.
+- **Dev login**
+  - `/dev/login` chooses a dev account and sets a signed `sess` cookie (HttpOnly). No legacy `role` cookie.
+  - Header shows current session role with a link to `/dev/login`.
 - **Images**
   - Local originals under `.data/storage/photos-orig/` (EXIF kept).
   - Variants WebP (`sm/md/lg`) via `sharp`, served either:
@@ -35,8 +35,8 @@ Purpose: short, practical notes kept in sync with code. Optimized for LLMs and h
   - Adds `User` table and seeds two dev accounts: `sqlite-user` (role: user) and `sqlite-moderator` (role: moderator).
   - Adds `Photo.ownerId` (nullable initially), plus helpful indexes.
   - Adds a SQLite trigger to default `Photo.status` to `APPROVED` if not provided.
-- Step 2 (this patch): dev sessions via signed `sess` cookie. `/dev/login` lets you switch between `sqlite-user` (maps to legacy creator) and `sqlite-moderator` (legacy moderator).
-- Middleware now prefers the session role; still accepts the old role cookie to keep ingest/quotas working. We set both on login.
+- Step 2 (this patch): dev sessions via signed `sess` cookie only. `/dev/login` lets you switch between `sqlite-user` and `sqlite-moderator`.
+- Legacy `role` cookie removed; middleware and quotas derive permissions solely from the session role.
 - Header shows current session role and a link to `/dev/login`.
 - Step 3 will set `ownerId` on upload and add "My photos" + creator public pages.
 

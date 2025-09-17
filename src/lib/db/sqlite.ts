@@ -9,7 +9,7 @@ import type { DbPort } from './port';
 import type { Photo, PhotoStatus } from './types';
 
 // Simple sql template literal for ESLint sql plugin
-const sql = (strings: TemplateStringsArray, ...values: any[]) => {
+const sql = (strings: TemplateStringsArray, ...values: unknown[]) => {
   return strings.reduce(
     (result, string, i) => result + string + (values[i] ?? ''),
     ''
@@ -220,22 +220,24 @@ export function insertAudit(a: {
 }
 
 export function listApproved(limit = 60, offset = 0) {
-  const db = getConn() as any;
+  const db = getConn();
   const rows = db
     .prepare(
       `
     SELECT
       id,
       status,
-      sizesjson,
       origkey,
+      sizesjson,
       width,
       height,
       createdat,
       phash,
       duplicateof,
-      ownerid,
-      deletedat
+      updatedat,
+      rejectionreason,
+      deletedat,
+      ownerid
     FROM Photo
     WHERE status = 'APPROVED'
       AND deletedat IS NULL
@@ -243,12 +245,8 @@ export function listApproved(limit = 60, offset = 0) {
     LIMIT ? OFFSET ?
   `
     )
-    .all(limit, offset) as any[];
-  return rows.map(r => ({
-    ...r,
-    sizesjson:
-      typeof r.sizesjson === 'string' ? JSON.parse(r.sizesjson) : r.sizesjson,
-  }));
+    .all(limit, offset);
+  return rows.map(mapRow).filter(Boolean) as Photo[];
 }
 
 export const listPending: DbPort['listPending'] = (limit = 50, offset = 0) => {
@@ -262,7 +260,9 @@ export const listPending: DbPort['listPending'] = (limit = 50, offset = 0) => {
 
 export const listRecent: DbPort['listRecent'] = (limit = 200, offset = 0) => {
   const rows = conn
-    .prepare('SELECT * FROM photo ORDER BY createdat DESC LIMIT ? OFFSET ?')
+    .prepare(
+      'SELECT * FROM photo WHERE deletedat IS NULL ORDER BY createdat DESC LIMIT ? OFFSET ?'
+    )
     .all(limit, offset);
   return rows.map(mapRow).filter(Boolean) as Photo[];
 };
@@ -282,22 +282,24 @@ export const countPending: DbPort['countPending'] = () => {
 };
 
 export function listPhotosByOwner(ownerId: string) {
-  const db = getConn() as any;
+  const db = getConn();
   const rows = db
     .prepare(
       `
     SELECT
       id,
       status,
-      sizesjson,
       origkey,
+      sizesjson,
       width,
       height,
       createdat,
       phash,
       duplicateof,
-      ownerid,
-      deletedat
+      updatedat,
+      rejectionreason,
+      deletedat,
+      ownerid
     FROM Photo
     WHERE ownerid = ?
       AND status = 'APPROVED'
@@ -305,12 +307,8 @@ export function listPhotosByOwner(ownerId: string) {
     ORDER BY datetime(createdat) DESC
   `
     )
-    .all(ownerId) as any[];
-  return rows.map(r => ({
-    ...r,
-    sizesjson:
-      typeof r.sizesjson === 'string' ? JSON.parse(r.sizesjson) : r.sizesjson,
-  }));
+    .all(ownerId);
+  return rows.map(mapRow).filter(Boolean) as Photo[];
 }
 
 // Dev-only helper for /dev/login (keeps DbPort unchanged)
@@ -340,39 +338,34 @@ export function listUsers(): {
 }
 
 export function getPhoto(id: string) {
-  const db = getConn() as any;
+  const db = getConn();
   const r = db
     .prepare(
       `
     SELECT
       id,
       status,
-      sizesjson,
       origkey,
+      sizesjson,
       width,
       height,
       createdat,
       phash,
       duplicateof,
-      ownerid,
-      deletedat,
+      updatedat,
       rejectionreason,
-      updatedat
+      deletedat,
+      ownerid
     FROM Photo
     WHERE id = ? LIMIT 1
   `
     )
-    .get(id) as any;
-  if (!r) return undefined;
-  return {
-    ...r,
-    sizesjson:
-      typeof r.sizesjson === 'string' ? JSON.parse(r.sizesjson) : r.sizesjson,
-  };
+    .get(id);
+  return mapRow(r);
 }
 
 export function softDeletePhoto(id: string) {
-  const db = getConn() as any;
+  const db = getConn();
   const now = new Date().toISOString();
   db.prepare(
     sql`UPDATE Photo SET deletedat = ? WHERE id = ? AND deletedat IS NULL`
@@ -384,7 +377,7 @@ export function updatePhotoStatus(
   status: 'APPROVED' | 'REJECTED',
   reason: string | null = null
 ) {
-  const db = getConn() as any;
+  const db = getConn();
   db.prepare(
     sql`UPDATE Photo SET status = ?, rejectionreason = ?, updatedat = ? WHERE id = ? AND deletedat IS NULL`
   ).run(status, reason, new Date().toISOString(), id);

@@ -1,9 +1,7 @@
 // Step 2: Dev login page. Pick between sqlite-user and sqlite-moderator.
-// Also sets the legacy "role" cookie for compatibility with current quotas/ingest.
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { COOKIE_NAME } from '@/src/lib/role-cookie';
 import { getDevUsers } from '@/src/lib/users/dev';
 import { clearSession, setSession } from '@/src/ports/auth';
 
@@ -11,19 +9,6 @@ export const dynamic = 'force-dynamic';
 
 async function getUsers() {
   return await getDevUsers();
-}
-
-async function setLegacyRoleCookie(role: 'user' | 'moderator') {
-  const store = await cookies();
-  // Map new roles -> old cookie values used by current gating/quotas
-  const legacy = role === 'moderator' ? 'moderator' : 'creator';
-  store.set(COOKIE_NAME, legacy, {
-    path: '/',
-    sameSite: 'lax',
-    httpOnly: false, // legacy design (client reflects)
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 60 * 60 * 24 * 30,
-  });
 }
 
 export default async function Page({
@@ -45,16 +30,12 @@ export default async function Page({
     const chosen = users.find(u => u.id === userId) || users[0];
     const role = chosen?.role ?? 'user';
     await setSession({ userId, role });
-    await setLegacyRoleCookie(role); // temporary bridge until quotas read session
     redirect(from || '/');
   }
 
   async function signOut() {
     'use server';
     await clearSession();
-    // Also clear legacy role cookie
-    const store2 = await cookies();
-    store2.delete(COOKIE_NAME);
     redirect('/dev/login');
   }
 
@@ -64,8 +45,7 @@ export default async function Page({
         Dev Login
       </h1>
       <p style={{ opacity: 0.8, marginBottom: 16 }}>
-        Pick a local user. This sets a signed <code>sess</code> cookie and a
-        legacy <code>{COOKIE_NAME}</code> cookie for compatibility.
+        Pick a local user. This sets a signed <code>sess</code> cookie.
       </p>
       <form
         action={signIn}

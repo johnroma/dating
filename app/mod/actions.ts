@@ -28,7 +28,15 @@ export async function setPhotoStatus(
 
   // add these small helpers in the db adapters if missing:
   //   updatePhotoStatus(id, status, reason?)
-  await (db as any).updatePhotoStatus?.(id, status, reason ?? null);
+  await (
+    db as {
+      updatePhotoStatus?: (
+        id: string,
+        status: Status,
+        reason: string | null
+      ) => Promise<void>;
+    }
+  ).updatePhotoStatus?.(id, status, reason ?? null);
 
   revalidatePath('/moderate');
   revalidatePath('/');

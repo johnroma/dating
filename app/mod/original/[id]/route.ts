@@ -5,16 +5,16 @@ import fs from 'node:fs';
 import { NextResponse } from 'next/server';
 
 import { getDb } from '@/src/lib/db';
-import { getRoleFromCookies } from '@/src/lib/role-cookie';
 import { origPath, exists } from '@/src/lib/storage/fs';
+import { getSession } from '@/src/ports/auth';
 import { getStorage } from '@/src/ports/storage';
 
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const role = await getRoleFromCookies();
-  if (role !== 'moderator')
+  const sess = await getSession().catch(() => null);
+  if (sess?.role !== 'moderator')
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
   const db = getDb();

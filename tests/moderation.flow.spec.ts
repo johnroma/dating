@@ -82,11 +82,11 @@ describe('moderation flow', () => {
     expect(forbRes.status).toBe(403);
     await forbRes.arrayBuffer().catch(() => {});
 
-    // Mock role cookie to allow original access
-    vi.doMock('../src/lib/role-cookie', () => ({
-      getRoleFromCookies: async () => 'moderator',
-      setRoleCookie: async () => {},
-      COOKIE_NAME: 'role',
+    // Mock session to allow original access (moderator)
+    vi.doMock('../src/ports/auth', () => ({
+      getSession: async () => ({ userId: 'test-mod', role: 'moderator' }),
+      setSession: async () => {},
+      clearSession: async () => {},
     }));
     const { GET: origGet } = await import('../app/mod/original/[id]/route');
     const oRes = await origGet(new Request('http://local/mod/original'), {

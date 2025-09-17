@@ -35,28 +35,59 @@ export async function GET(
 
   // Enforce status: only APPROVED are publicly served for non-moderators
   try {
-    const [{ getDb }, { COOKIE_NAME }, { parseRole }] = await Promise.all([
-      import('@/src/lib/db'),
-      import('@/src/lib/role-cookie'),
-      import('@/src/lib/roles'),
-    ]);
+    const [{ getDb }] = await Promise.all([import('@/src/lib/db')]);
     const db = getDb();
     const photo = await db.getPhoto(photoId);
+
+    // Debug logging
+    console.log('DEBUG: photoId:', photoId);
+    console.log('DEBUG: photo:', photo);
+    console.log('DEBUG: photo status:', photo?.status);
+    console.log('DEBUG: photo deletedat:', photo?.deletedat);
+
+    // Parse sess cookie from raw header (no HMAC verify here)
     const cookie = _req.headers.get('cookie') || '';
-    const roleCookie = cookie
+    const sessRaw = cookie
       .split(/;\s*/)
       .map(kv => kv.split('='))
-      .find(([k]) => k === COOKIE_NAME)?.[1];
-    const role = parseRole(roleCookie);
-    const isModerator = role === 'moderator';
+      .find(([k]) => k === 'sess')?.[1];
+    let isModerator = false;
+    if (sessRaw) {
+      const [payload] = sessRaw.split('.');
+      if (payload) {
+        try {
+          const json = JSON.parse(
+            Buffer.from(payload, 'base64url').toString('utf8')
+          );
+          isModerator = json?.role === 'moderator';
+        } catch {
+          // Ignore parsing errors for session cookie
+        }
+      }
+    }
+
+    console.log('DEBUG: isModerator:', isModerator);
+    console.log('DEBUG: cookie:', cookie);
+
     if (
       !photo ||
       photo.deletedat ||
       (photo.status !== 'APPROVED' && !isModerator)
     ) {
+      console.log(
+        'DEBUG: Returning 403 - photo:',
+        !!photo,
+        'deletedat:',
+        photo?.deletedat,
+        'status:',
+        photo?.status,
+        'isModerator:',
+        isModerator
+      );
       return NextResponse.json({ error: 'forbidden' }, { status: 403 });
     }
-  } catch {
+  } catch (error) {
+    console.log('DEBUG: Error in access control:', error);
     // If anything goes wrong enforcing, fall through to 404/serve from disk
   }
 

@@ -6,13 +6,13 @@ import React, { Suspense } from 'react';
 
 import PhotoUploader from '@/components/PhotoUploader';
 import { getDb } from '@/src/lib/db';
-import { getRoleFromCookies } from '@/src/lib/role-cookie';
+import { getSession } from '@/src/ports/auth';
 
 async function Gallery() {
   noStore();
   const db = getDb();
-  const role = await getRoleFromCookies();
-  const isModerator = role === 'moderator';
+  const sess = await getSession().catch(() => null);
+  const isModerator = sess?.role === 'moderator';
   const photos = isModerator
     ? await db.listRecent(200, 0)
     : await db.listApproved(30, 0);
