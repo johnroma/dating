@@ -204,7 +204,7 @@ export const listApproved: DbPort['listApproved'] = async (
 ) => {
   // Schema already exists
   const { rows } = await pool.query(
-    'SELECT * FROM photo WHERE status = $1 ORDER BY createdat DESC LIMIT $2 OFFSET $3',
+    'SELECT * FROM photo WHERE status = $1 AND deletedat IS NULL ORDER BY createdat DESC LIMIT $2 OFFSET $3',
     ['APPROVED', limit, offset]
   );
   return rows.map(rowToPhoto);
@@ -228,7 +228,7 @@ export const listRecent: DbPort['listRecent'] = async (
 ) => {
   // Schema already exists
   const { rows } = await pool.query(
-    'SELECT * FROM photo ORDER BY createdat DESC LIMIT $1 OFFSET $2',
+    'SELECT * FROM photo WHERE deletedat IS NULL ORDER BY createdat DESC LIMIT $1 OFFSET $2',
     [limit, offset]
   );
   return rows.map(rowToPhoto);

@@ -96,6 +96,7 @@ export async function POST(req: Request) {
     // ignore ingest key upsert errors
   }
 
+  // TODO: Make quotas session-native instead of mapping session roles to legacy quota roles
   // Temporary mapping: quotas still accept 'creator'|'moderator'
   const quota_role = session_role === 'moderator' ? 'moderator' : 'creator';
   const quota = getRoleQuota(quota_role as 'creator' | 'moderator');

@@ -51,7 +51,8 @@ function getConn() {
       duplicateof TEXT,
       updatedat TEXT,
       rejectionreason TEXT,
-      deletedat TEXT
+      deletedat TEXT,
+      ownerid TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_photo_status_created ON photo(status, createdat DESC);
 
