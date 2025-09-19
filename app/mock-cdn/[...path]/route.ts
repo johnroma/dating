@@ -52,7 +52,7 @@ export async function GET(
           const json = JSON.parse(
             Buffer.from(payload, 'base64url').toString('utf8')
           );
-          isModerator = json?.role === 'moderator';
+          isModerator = json?.role === 'admin';
         } catch {
           // Ignore parsing errors for session cookie
         }

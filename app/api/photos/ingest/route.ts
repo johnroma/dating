@@ -38,7 +38,9 @@ export async function POST(req: Request) {
   // Determine actor role via dev session (session-only; no legacy role cookie)
   const db = getDb();
   const sess = await getSession().catch(() => null);
-  const session_role = sess?.role || 'viewer';
+  // session roles now: 'viewer' | 'member' | 'admin'
+  const session_role =
+    (sess?.role as 'viewer' | 'member' | 'admin') || 'viewer';
 
   // Step 7 idempotency (by explicit key or implicit key:<origKey>)
   const idem = idempotencyKey || `key:${key}`;
@@ -92,8 +94,9 @@ export async function POST(req: Request) {
     // ignore ingest key upsert errors
   }
 
-  // Map session roles to quota roles
-  const quota_role = session_role === 'moderator' ? 'moderator' : 'creator';
+  // Map session roles to legacy quota roles (until quotas accept session roles natively)
+  // admin → moderator, member/viewer → creator
+  const quota_role = session_role === 'admin' ? 'moderator' : 'creator';
   const quota = getRoleQuota(quota_role as 'creator' | 'moderator');
   const usage = await getUsage();
   try {

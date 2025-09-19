@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server';
 // Parse `sess` cookie (dev session) without verifying HMAC here (edge-friendly)
 function parseSessCookie(
   req: NextRequest
-): { role: 'viewer' | 'creator' | 'moderator' } | null {
+): { role: 'viewer' | 'member' | 'admin' } | null {
   const raw = req.cookies.get('sess')?.value;
   if (!raw) return null;
   const [payload] = raw.split('.');
@@ -14,8 +14,8 @@ function parseSessCookie(
     if (
       json &&
       (json.role === 'viewer' ||
-        json.role === 'creator' ||
-        json.role === 'moderator')
+        json.role === 'member' ||
+        json.role === 'admin')
     )
       return { role: json.role };
   } catch {
@@ -38,9 +38,9 @@ export function middleware(req: NextRequest) {
   }
   if (pathname.startsWith('/dev/login')) return NextResponse.next();
 
-  // /upload : allow creator or moderator
+  // /upload : allow member or admin
   if (pathname.startsWith('/upload')) {
-    if (sess?.role === 'creator' || sess?.role === 'moderator')
+    if (sess?.role === 'member' || sess?.role === 'admin')
       return NextResponse.next();
     const url = req.nextUrl.clone();
     url.pathname = '/dev/login';
@@ -48,9 +48,9 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // /moderate : allow only moderator
+  // /moderate : allow only admin
   if (pathname.startsWith('/moderate')) {
-    if (sess?.role === 'moderator') return NextResponse.next();
+    if (sess?.role === 'admin') return NextResponse.next();
     const url = req.nextUrl.clone();
     url.pathname = '/dev/login';
     url.searchParams.set('from', pathname);

@@ -41,7 +41,7 @@ export default async function PhotoPage({
         <Link className='underline' href='/'>
           ← Back to gallery
         </Link>
-        {sess?.role === 'moderator' ? (
+        {sess?.role === 'admin' ? (
           <Link className='underline' href={`/mod/original/${photo.id}`}>
             Inspect original
           </Link>

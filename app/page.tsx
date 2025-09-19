@@ -12,7 +12,7 @@ async function Gallery() {
   noStore();
   const db = getDb();
   const sess = await getSession().catch(() => null);
-  const isModerator = sess?.role === 'moderator';
+  const isModerator = sess?.role === 'admin';
   const photos = isModerator
     ? await db.listRecent(200, 0)
     : await db.listApproved(30, 0);

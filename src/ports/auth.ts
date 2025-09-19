@@ -3,12 +3,12 @@ import crypto from 'node:crypto';
 
 import { cookies } from 'next/headers';
 
-export type SessionRole = 'viewer' | 'creator' | 'moderator';
+export type SessionRole = 'viewer' | 'member' | 'admin';
 export type Session = { userId: string; role: SessionRole };
 
-// Map database roles to application roles
+// Map database roles to application roles (now they match directly)
 export function mapDbRoleToAppRole(dbRole: 'member' | 'admin'): SessionRole {
-  return dbRole === 'member' ? 'creator' : 'moderator';
+  return dbRole; // Database roles now match session roles directly
 }
 
 const SESS_NAME = 'sess';
@@ -48,9 +48,7 @@ function decode(token: string | undefined | null): Session | null {
     if (
       obj &&
       typeof obj.userId === 'string' &&
-      (obj.role === 'viewer' ||
-        obj.role === 'creator' ||
-        obj.role === 'moderator')
+      (obj.role === 'viewer' || obj.role === 'member' || obj.role === 'admin')
     ) {
       return { userId: obj.userId, role: obj.role };
     }
@@ -87,7 +85,7 @@ export async function requireRole(
   const sess = await getSession();
   if (!sess)
     throw Object.assign(new Error('unauthorized'), { code: 'UNAUTHORIZED' });
-  if (min === 'moderator' && sess.role !== 'moderator') {
+  if (min === 'admin' && sess.role !== 'admin') {
     throw Object.assign(new Error('forbidden'), { code: 'FORBIDDEN' });
   }
   return sess;

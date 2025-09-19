@@ -11,7 +11,8 @@ type Status = 'APPROVED' | 'REJECTED';
 async function requireModerator() {
   const sess = await getSession().catch(() => null);
   if (!sess) redirect('/dev/login?from=/moderate');
-  if (sess.role !== 'moderator') throw new Error('forbidden');
+  // only admins can approve/reject
+  if (sess.role !== 'admin') throw new Error('forbidden');
   return sess;
 }
 

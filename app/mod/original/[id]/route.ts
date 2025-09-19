@@ -14,7 +14,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const sess = await getSession().catch(() => null);
-  if (sess?.role !== 'moderator')
+  if (sess?.role !== 'admin')
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
   const db = getDb();

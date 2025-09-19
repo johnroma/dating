@@ -19,7 +19,7 @@ export async function deletePhoto(id: string) {
   }
 
   // snake_case everywhere per repo rules
-  const canDelete = photo.ownerid === sess.userId || sess.role === 'moderator';
+  const canDelete = photo.ownerid === sess.userId || sess.role === 'admin';
   if (!canDelete) return;
 
   await db.softDeletePhoto?.(id);
