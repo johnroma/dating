@@ -82,9 +82,9 @@ describe('moderation flow', () => {
     expect(forbRes.status).toBe(403);
     await forbRes.arrayBuffer().catch(() => {});
 
-    // Mock session to allow original access (moderator)
+    // Mock session to allow original access (admin)
     vi.doMock('../src/ports/auth', () => ({
-      getSession: async () => ({ userId: 'test-mod', role: 'moderator' }),
+      getSession: async () => ({ userId: 'test-admin', role: 'admin' }),
       setSession: async () => {},
       clearSession: async () => {},
     }));
