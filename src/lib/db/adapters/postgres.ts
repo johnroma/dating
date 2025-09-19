@@ -1,7 +1,8 @@
 import { Pool } from 'pg';
 
-import type { DbPort } from './port';
-import type { Photo, PhotoStatus } from './types';
+import { ensurePostgresSchema } from '../ensure-postgres';
+import type { DbPort } from '../port';
+import type { Photo, PhotoStatus } from '../types';
 
 // Build connection string and SSL options from env
 const urlRaw = process.env.DATABASE_URL || '';
@@ -22,8 +23,6 @@ if (process.env.FORCE_STRICT_SSL) {
   // Also try to force an SSL error by using invalid hostname
   finalConnectionString =
     finalConnectionString?.replace(/@[^:]+:/, '@invalid-ssl-host:') || '';
-  console.log('Forcing strict SSL with verify-full mode and invalid hostname');
-  console.log('Modified connection string:', finalConnectionString);
 }
 
 // Optional strict TLS: provide CA via env (multi-line PEM or base64)
@@ -53,14 +52,6 @@ const ssl = ca
           checkServerIdentity: () => undefined, // Skip hostname verification
         }; // Always use relaxed SSL validation for Supabase
 
-// Debug logging
-if (process.env.DEBUG_SSL) {
-  console.log('Connection string:', connectionString);
-  console.log('Final connection string:', finalConnectionString);
-  console.log('SSL config:', ssl);
-  console.log('No verify:', noVerify);
-}
-
 const pool = new Pool({
   connectionString: finalConnectionString,
   max: 10, // Maximum number of clients in the pool
@@ -70,11 +61,18 @@ const pool = new Pool({
 });
 
 // Handle pool errors
-pool.on('error', err => {
-  console.error('Unexpected error on idle client', err);
+pool.on('error', () => {
+  // Silent error handling for production
 });
 
-// Schema already exists - no initialization needed
+// Initialize schema on first connection
+let schemaEnsured = false;
+async function ensureSchema() {
+  if (!schemaEnsured) {
+    await ensurePostgresSchema();
+    schemaEnsured = true;
+  }
+}
 
 function rowToPhoto(row: Record<string, unknown>): Photo {
   const sizesRaw = row['sizesjson'];
@@ -110,9 +108,9 @@ function rowToPhoto(row: Record<string, unknown>): Photo {
 }
 
 export const insertPhoto: DbPort['insertPhoto'] = async p => {
-  // Schema already exists
+  await ensureSchema();
   await pool.query(
-    'INSERT INTO photo (id, status, origkey, sizesjson, width, height, createdat, updatedat, rejectionreason, phash, duplicateof) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
+    'INSERT INTO photo (id, status, origkey, sizesjson, width, height, createdat, updatedat, rejectionreason, phash, duplicateof, ownerid) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',
     [
       p.id,
       p.status,
@@ -126,6 +124,7 @@ export const insertPhoto: DbPort['insertPhoto'] = async p => {
       p.rejectionreason ?? null,
       p.phash ?? null,
       p.duplicateof ?? null,
+      p.ownerid ?? null,
     ]
   );
 };
@@ -158,6 +157,20 @@ export const setStatus: DbPort['setStatus'] = async (id, status, extras) => {
   );
 };
 
+// Update photo status (for moderation actions)
+export async function updatePhotoStatus(
+  id: string,
+  status: 'APPROVED' | 'REJECTED',
+  reason: string | null = null
+) {
+  await ensureSchema();
+  const now = new Date();
+  await pool.query(
+    'UPDATE photo SET status = $1, rejectionreason = $2, updatedat = $3 WHERE id = $4',
+    [status, reason, now.toISOString(), id]
+  );
+}
+
 export const deletePhoto: DbPort['deletePhoto'] = async id => {
   // Schema already exists
   await pool.query('DELETE FROM photo WHERE id = $1', [id]);
@@ -182,7 +195,7 @@ export const restorePhoto: NonNullable<DbPort['restorePhoto']> = async id => {
 };
 
 export const getPhoto: DbPort['getPhoto'] = async id => {
-  // Schema already exists
+  await ensureSchema();
   const { rows } = await pool.query('SELECT * FROM photo WHERE id = $1', [id]);
   if (!rows[0]) return undefined;
   return rowToPhoto(rows[0]);
@@ -202,7 +215,7 @@ export const listApproved: DbPort['listApproved'] = async (
   limit = 50,
   offset = 0
 ) => {
-  // Schema already exists
+  await ensureSchema();
   const { rows } = await pool.query(
     'SELECT * FROM photo WHERE status = $1 AND deletedat IS NULL ORDER BY createdat DESC LIMIT $2 OFFSET $3',
     ['APPROVED', limit, offset]
@@ -226,7 +239,7 @@ export const listRecent: DbPort['listRecent'] = async (
   limit = 200,
   offset = 0
 ) => {
-  // Schema already exists
+  await ensureSchema();
   const { rows } = await pool.query(
     'SELECT * FROM photo WHERE deletedat IS NULL ORDER BY createdat DESC LIMIT $1 OFFSET $2',
     [limit, offset]
@@ -271,45 +284,47 @@ export async function insertAudit(a: {
   );
 }
 
-// Dev-only helper for /dev/login. Safe even if the User table isn't present yet.
-export async function listUsers(): Promise<
+// Dev-only helper for /dev/login. Safe even if the Member table isn't present yet.
+export async function listMembers(): Promise<
   {
     id: string;
     displayName: string;
-    role: 'user' | 'moderator';
+    role: 'member' | 'admin';
   }[]
 > {
   try {
     const res = await pool.query(
-      'SELECT id, displayname, role FROM users WHERE deletedat IS NULL ORDER BY role DESC, displayname ASC'
+      'SELECT id, displayname, role FROM account WHERE deletedat IS NULL ORDER BY role DESC, displayname ASC'
     );
     return (res?.rows || []).map(row => ({
       id: String(row.id),
       displayName: String(
         row.displayname ?? row.displayName ?? row.display_name ?? ''
       ),
-      role: row.role as 'user' | 'moderator',
+      role: row.role as 'member' | 'admin',
     }));
   } catch {
     return [];
   }
 }
 
-// Owner-scoped listing (stub until Postgres migration adds ownerid column)
+// Owner-scoped listing
 export async function listPhotosByOwner(ownerId: string): Promise<Photo[]> {
-  void ownerId;
-  return [];
+  await ensureSchema();
+  const { rows } = await pool.query(
+    'SELECT * FROM photo WHERE ownerid = $1 AND deletedat IS NULL ORDER BY createdat DESC',
+    [ownerId]
+  );
+  return rows.map(rowToPhoto);
 }
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-  console.log('Closing database pool...');
   await pool.end();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  console.log('Closing database pool...');
   await pool.end();
   process.exit(0);
 });

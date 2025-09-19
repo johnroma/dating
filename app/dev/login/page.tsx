@@ -1,9 +1,9 @@
-// Step 2: Dev login page. Pick between sqlite-user and sqlite-moderator.
+// Step 2: Dev login page. Pick between member and admin.
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { getDevUsers } from '@/src/lib/users/dev';
-import { clearSession, setSession } from '@/src/ports/auth';
+import { clearSession, setSession, mapDbRoleToAppRole } from '@/src/ports/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,7 +28,7 @@ export default async function Page({
     // Derive role from the chosen account (DB/defaults)
     const users = await getDevUsers();
     const chosen = users.find(u => u.id === userId) || users[0];
-    const role = chosen?.role ?? 'user';
+    const role = mapDbRoleToAppRole(chosen?.role ?? 'member');
     await setSession({ userId, role });
     redirect(from || '/');
   }
@@ -45,7 +45,7 @@ export default async function Page({
         Dev Login
       </h1>
       <p style={{ opacity: 0.8, marginBottom: 16 }}>
-        Pick a local user. This sets a signed <code>sess</code> cookie.
+        Pick a local member. This sets a signed <code>sess</code> cookie.
       </p>
       <form
         action={signIn}

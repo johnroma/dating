@@ -94,20 +94,10 @@ export async function GET(
         'Cache-Control': 'public, max-age=31536000, immutable',
       },
     });
-    if (process.env.DEBUG_MOCK_CDN === '1') {
-      res.headers.set('x-cdn-root', root);
-      res.headers.set('x-cdn-abs', abs);
-      res.headers.set('x-cdn-exists', '1');
-    }
 
     return res;
   } catch {
     const res = new NextResponse(null, { status: 404 });
-    if (process.env.DEBUG_MOCK_CDN === '1') {
-      res.headers.set('x-cdn-root', root);
-      res.headers.set('x-cdn-abs', abs);
-      res.headers.set('x-cdn-exists', '0');
-    }
     return res;
   }
 }

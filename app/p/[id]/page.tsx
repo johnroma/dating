@@ -28,7 +28,11 @@ export default async function PhotoPage({
   }
 
   const url = photo.sizesjson?.lg || photo.sizesjson?.md || photo.sizesjson?.sm;
-  const CDN_BASE = process.env.NEXT_PUBLIC_CDN_BASE_URL || '/mock-cdn';
+  const storageDriver = process.env.STORAGE_DRIVER || 'local';
+  const CDN_BASE =
+    storageDriver === 'r2'
+      ? process.env.CDN_BASE_URL || '/mock-cdn'
+      : process.env.NEXT_PUBLIC_CDN_BASE_URL || '/mock-cdn';
   const unopt = CDN_BASE.startsWith('/');
 
   return (

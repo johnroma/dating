@@ -8,7 +8,7 @@ export default async function ForbiddenPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const sess = await getSession().catch(() => null);
-  const role = sess?.role || 'user';
+  const role = sess?.role || 'viewer';
   const sp = await searchParams;
   const from = typeof sp?.from === 'string' ? sp.from : undefined;
 

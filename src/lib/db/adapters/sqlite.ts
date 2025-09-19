@@ -3,10 +3,11 @@ import path from 'node:path';
 
 import Database from 'better-sqlite3';
 
-import { ensureSqliteSchema } from '@/src/lib/db/ensure-sqlite';
+import { ensureSqliteSchema } from '../ensure-sqlite';
+import type { DbPort } from '../port';
+import type { Photo } from '../types';
 
-import type { DbPort } from './port';
-import type { Photo, PhotoStatus } from './types';
+import { mapRowToPhoto } from './common';
 
 // Simple sql template literal for ESLint sql plugin
 const sql = (strings: TemplateStringsArray, ...values: unknown[]) => {
@@ -78,8 +79,8 @@ function getConn() {
   `);
   try {
     ensureSqliteSchema(db);
-  } catch (e) {
-    console.error('[sqlite ensure schema] error:', e);
+  } catch {
+    // Schema already exists or error handled by ensureSqliteSchema
   }
   return db;
 }
@@ -114,31 +115,8 @@ const stmtInsertAudit = conn.prepare(
   'INSERT INTO auditlog(id, photoid, action, actor, reason, at) VALUES(?, ?, ?, ?, ?, ?)'
 );
 
-function mapRow(row: unknown): Photo | undefined {
-  if (!row || typeof row !== 'object') return undefined;
-  const r = row as Record<string, unknown>;
-  const sizesRaw = r['sizesjson'];
-  const sizes =
-    typeof sizesRaw === 'string'
-      ? JSON.parse(sizesRaw as string)
-      : (sizesRaw as Record<string, string> | undefined);
-  return {
-    id: String(r['id']),
-    status: r['status'] as PhotoStatus,
-    origkey: String(r['origkey']),
-    sizesjson: sizes || {},
-    width: (r['width'] as number | null | undefined) ?? null,
-    height: (r['height'] as number | null | undefined) ?? null,
-    createdat: String(r['createdat']),
-    updatedat: (r['updatedat'] as string | null | undefined) ?? null,
-    phash: (r['phash'] as string | null | undefined) ?? null,
-    duplicateof: (r['duplicateof'] as string | null | undefined) ?? null,
-    rejectionreason:
-      (r['rejectionreason'] as string | null | undefined) ?? null,
-    deletedat: (r['deletedat'] as string | null | undefined) ?? null,
-    ownerid: (r['ownerid'] as string | null | undefined) ?? null,
-  };
-}
+// Use shared mapping function
+const mapRow = mapRowToPhoto;
 
 export const insertPhoto: DbPort['insertPhoto'] = p => {
   stmtInsert.run(
@@ -192,24 +170,24 @@ export const getByOrigKey: DbPort['getByOrigKey'] = origkey => {
 };
 
 // Step 7 helpers (not in DbPort on purpose; import directly when needed)
-export function upsertIngestKey(
+export const upsertIngestKey = (
   id: string,
   photoid: string
-): 'created' | 'exists' {
+): 'created' | 'exists' => {
   const row = stmtGetIngestKey.get(id) as { photoid: string } | undefined;
   if (row?.photoid) return 'exists';
   stmtUpsertIngestKey.run(id, photoid, new Date().toISOString());
   return 'created';
-}
+};
 
-export function insertAudit(a: {
+export const insertAudit = (a: {
   id: string;
   photoid: string;
   action: string;
   actor: string;
   reason?: string | null;
   at: string;
-}) {
+}) => {
   stmtInsertAudit.run(
     a.id,
     a.photoid,
@@ -218,9 +196,12 @@ export function insertAudit(a: {
     a.reason ?? null,
     a.at
   );
-}
+};
 
-export function listApproved(limit = 60, offset = 0) {
+export const listApproved: DbPort['listApproved'] = (
+  limit = 60,
+  offset = 0
+) => {
   const db = getConn();
   const rows = db
     .prepare(
@@ -247,8 +228,8 @@ export function listApproved(limit = 60, offset = 0) {
   `
     )
     .all(limit, offset);
-  return rows.map(mapRow).filter(Boolean) as Photo[];
-}
+  return rows.map(mapRow).filter((p): p is Photo => p !== undefined);
+};
 
 export const listPending: DbPort['listPending'] = (limit = 50, offset = 0) => {
   const rows = conn
@@ -256,7 +237,7 @@ export const listPending: DbPort['listPending'] = (limit = 50, offset = 0) => {
       'SELECT * FROM photo WHERE status = ? ORDER BY createdat DESC LIMIT ? OFFSET ?'
     )
     .all('PENDING', limit, offset);
-  return rows.map(mapRow).filter(Boolean) as Photo[];
+  return rows.map(mapRow).filter((p): p is Photo => p !== undefined);
 };
 
 export const listRecent: DbPort['listRecent'] = (limit = 200, offset = 0) => {
@@ -265,7 +246,7 @@ export const listRecent: DbPort['listRecent'] = (limit = 200, offset = 0) => {
       'SELECT * FROM photo WHERE deletedat IS NULL ORDER BY createdat DESC LIMIT ? OFFSET ?'
     )
     .all(limit, offset);
-  return rows.map(mapRow).filter(Boolean) as Photo[];
+  return rows.map(mapRow).filter((p): p is Photo => p !== undefined);
 };
 
 export const countApproved: DbPort['countApproved'] = () => {
@@ -282,7 +263,7 @@ export const countPending: DbPort['countPending'] = () => {
   return Number(row?.c ?? 0);
 };
 
-export function listPhotosByOwner(ownerId: string) {
+export const listPhotosByOwner = (ownerId: string) => {
   const db = getConn();
   const rows = db
     .prepare(
@@ -309,24 +290,24 @@ export function listPhotosByOwner(ownerId: string) {
   `
     )
     .all(ownerId);
-  return rows.map(mapRow).filter(Boolean) as Photo[];
-}
+  return rows.map(mapRow).filter((p): p is Photo => p !== undefined);
+};
 
 // Dev-only helper for /dev/login (keeps DbPort unchanged)
-export function listUsers(): {
+export const listMembers = (): {
   id: string;
   displayName: string;
-  role: 'user' | 'moderator';
-}[] {
+  role: 'member' | 'admin';
+}[] => {
   try {
     const rows = conn
       .prepare(
-        'SELECT id, displayname, role FROM user WHERE deletedat IS NULL ORDER BY role DESC, displayname ASC'
+        'SELECT id, displayname, role FROM account WHERE deletedat IS NULL ORDER BY role DESC, displayname ASC'
       )
       .all() as {
       id: string;
       displayname: string;
-      role: 'user' | 'moderator';
+      role: 'member' | 'admin';
     }[];
     return (rows || []).map(row => ({
       id: row.id,
@@ -336,9 +317,9 @@ export function listUsers(): {
   } catch {
     return [];
   }
-}
+};
 
-export function getPhoto(id: string) {
+export const getPhoto: DbPort['getPhoto'] = id => {
   const db = getConn();
   const r = db
     .prepare(
@@ -363,15 +344,15 @@ export function getPhoto(id: string) {
     )
     .get(id);
   return mapRow(r);
-}
+};
 
-export function softDeletePhoto(id: string) {
+export const softDeletePhoto: NonNullable<DbPort['softDeletePhoto']> = id => {
   const db = getConn();
   const now = new Date().toISOString();
   db.prepare(
     sql`UPDATE Photo SET deletedat = ? WHERE id = ? AND deletedat IS NULL`
   ).run(now, id);
-}
+};
 
 export function updatePhotoStatus(
   id: string,

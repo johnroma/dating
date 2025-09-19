@@ -15,7 +15,10 @@ export function ensureLocalStorageDirs() {
 }
 
 function baseUrl(): string {
-  return process.env.NEXT_PUBLIC_CDN_BASE_URL || '/mock-cdn';
+  const storageDriver = process.env.STORAGE_DRIVER || 'local';
+  return storageDriver === 'r2'
+    ? process.env.CDN_BASE_URL || '/mock-cdn'
+    : process.env.NEXT_PUBLIC_CDN_BASE_URL || '/mock-cdn';
 }
 
 async function rmIfExists(absPath: string): Promise<void> {

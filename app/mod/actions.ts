@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
+import { getDb } from '@/src/lib/db';
 import { getSession } from '@/src/ports/auth';
 
 type Status = 'APPROVED' | 'REJECTED';
@@ -20,23 +21,8 @@ export async function setPhotoStatus(
   reason?: string | null
 ) {
   await requireModerator();
-  const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
-  const db =
-    driver === 'postgres'
-      ? await import('@/src/lib/db/postgres')
-      : await import('@/src/lib/db/sqlite');
-
-  // add these small helpers in the db adapters if missing:
-  //   updatePhotoStatus(id, status, reason?)
-  await (
-    db as {
-      updatePhotoStatus?: (
-        id: string,
-        status: Status,
-        reason: string | null
-      ) => Promise<void>;
-    }
-  ).updatePhotoStatus?.(id, status, reason ?? null);
+  const db = getDb();
+  await db.updatePhotoStatus?.(id, status, reason ?? null);
 
   revalidatePath('/moderate');
   revalidatePath('/');

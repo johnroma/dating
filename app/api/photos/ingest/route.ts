@@ -38,7 +38,7 @@ export async function POST(req: Request) {
   // Determine actor role via dev session (session-only; no legacy role cookie)
   const db = getDb();
   const sess = await getSession().catch(() => null);
-  const session_role = sess?.role === 'moderator' ? 'moderator' : 'user';
+  const session_role = sess?.role || 'viewer';
 
   // Step 7 idempotency (by explicit key or implicit key:<origKey>)
   const idem = idempotencyKey || `key:${key}`;
@@ -53,10 +53,14 @@ export async function POST(req: Request) {
     try {
       const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
       if (driver === 'postgres') {
-        const { upsertIngestKey } = await import('@/src/lib/db/postgres');
+        const { upsertIngestKey } = await import(
+          '@/src/lib/db/adapters/postgres'
+        );
         await upsertIngestKey(idem, existing.id);
       } else {
-        const { upsertIngestKey } = await import('@/src/lib/db/sqlite');
+        const { upsertIngestKey } = await import(
+          '@/src/lib/db/adapters/sqlite'
+        );
         upsertIngestKey(idem, existing.id);
       }
     } catch {
@@ -72,15 +76,7 @@ export async function POST(req: Request) {
 
   // If idem key already seen, return the known photo
   try {
-    const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
-    let state: 'created' | 'exists' = 'created';
-    if (driver === 'postgres') {
-      const { upsertIngestKey } = await import('@/src/lib/db/postgres');
-      state = await upsertIngestKey(idem, candidateId);
-    } else {
-      const { upsertIngestKey } = await import('@/src/lib/db/sqlite');
-      state = upsertIngestKey(idem, candidateId);
-    }
+    const state = (await db.upsertIngestKey?.(idem, candidateId)) ?? 'created';
     if (state === 'exists') {
       const prev = await db.getPhoto(candidateId);
       if (prev) {
@@ -96,8 +92,7 @@ export async function POST(req: Request) {
     // ignore ingest key upsert errors
   }
 
-  // TODO: Make quotas session-native instead of mapping session roles to legacy quota roles
-  // Temporary mapping: quotas still accept 'creator'|'moderator'
+  // Map session roles to quota roles
   const quota_role = session_role === 'moderator' ? 'moderator' : 'creator';
   const quota = getRoleQuota(quota_role as 'creator' | 'moderator');
   const usage = await getUsage();
@@ -189,7 +184,6 @@ export async function POST(req: Request) {
 
   // Audit
   try {
-    const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
     const a = {
       id: crypto.randomUUID(),
       photoid: photoId,
@@ -198,13 +192,7 @@ export async function POST(req: Request) {
       reason: null as string | null,
       at: new Date().toISOString(),
     };
-    if (driver === 'postgres') {
-      const { insertAudit } = await import('@/src/lib/db/postgres');
-      await insertAudit(a);
-    } else {
-      const { insertAudit } = await import('@/src/lib/db/sqlite');
-      insertAudit(a);
-    }
+    await db.insertAudit?.(a);
   } catch {
     // ignore audit log errors
   }

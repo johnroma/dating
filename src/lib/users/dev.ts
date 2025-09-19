@@ -1,35 +1,22 @@
 // Fetch dev users in a DB-driver-safe way (SQLite first; PG falls back if table not present)
+import { getDb } from '@/src/lib/db';
+
 export type DevUser = {
   id: string;
   displayName: string;
-  role: 'user' | 'moderator';
+  role: 'member' | 'admin';
 };
 
+// Default dev users (database-agnostic)
 const DEFAULTS: DevUser[] = [
-  { id: 'sqlite-user', displayName: 'SQLite User', role: 'user' },
-  {
-    id: 'sqlite-moderator',
-    displayName: 'SQLite Moderator',
-    role: 'moderator',
-  },
+  { id: 'member', displayName: 'Member', role: 'member' },
+  { id: 'admin', displayName: 'Admin', role: 'admin' },
 ];
 
 export async function getDevUsers(): Promise<DevUser[]> {
-  const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
   try {
-    if (driver === 'postgres') {
-      // PG path — if table isn't migrated yet, catch and return defaults
-      const mod = (await import('@/src/lib/db/postgres')) as {
-        listUsers?: () => Promise<DevUser[]>;
-      };
-      const rows = mod.listUsers ? await mod.listUsers() : null;
-      return Array.isArray(rows) && rows.length ? rows : DEFAULTS;
-    }
-    // SQLite path
-    const mod = (await import('@/src/lib/db/sqlite')) as {
-      listUsers?: () => DevUser[];
-    };
-    const rows = mod.listUsers ? mod.listUsers() : null;
+    const db = getDb();
+    const rows = await db.listMembers?.();
     return Array.isArray(rows) && rows.length ? rows : DEFAULTS;
   } catch {
     return DEFAULTS;

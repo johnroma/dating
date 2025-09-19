@@ -23,4 +23,35 @@ export type DbPort = {
   countApproved(): number | Promise<number>;
   countPending(): number | Promise<number>;
   listRecent(limit?: number, offset?: number): Photo[] | Promise<Photo[]>;
+  listPhotosByOwner(ownerId: string): Photo[] | Promise<Photo[]>;
+  upsertIngestKey?(
+    id: string,
+    photoid: string
+  ): 'created' | 'exists' | Promise<'created' | 'exists'>;
+  insertAudit?(audit: {
+    id: string;
+    photoid: string;
+    action: string;
+    actor: string;
+    reason?: string | null;
+    at: string;
+  }): void | Promise<void>;
+  listMembers?():
+    | Array<{
+        id: string;
+        displayName: string;
+        role: 'member' | 'admin';
+      }>
+    | Promise<
+        Array<{
+          id: string;
+          displayName: string;
+          role: 'member' | 'admin';
+        }>
+      >;
+  updatePhotoStatus?(
+    id: string,
+    status: 'APPROVED' | 'REJECTED',
+    reason?: string | null
+  ): void | Promise<void>;
 };

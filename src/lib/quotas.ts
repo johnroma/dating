@@ -11,10 +11,10 @@ export function getRoleQuota(role: 'viewer' | 'creator' | 'moderator') {
   return { maxPhotos: Infinity, maxBytes: Infinity };
 }
 
-/** Minimal usage – count photos only (bytes TODO when we track per-photo byte size). */
+/** Minimal usage – count photos only. */
 export async function getUsage(/* role: string */) {
   const db = getDb();
-  // If you later want per-user quotas, change this to per-user queries.
+  // If you later want per-member quotas, change this to per-member queries.
   const total = (await db.countApproved?.()) ?? 0;
   return { photos: Number(total) || 0, bytes: 0 };
 }

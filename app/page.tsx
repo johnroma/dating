@@ -16,7 +16,11 @@ async function Gallery() {
   const photos = isModerator
     ? await db.listRecent(200, 0)
     : await db.listApproved(30, 0);
-  const CDN_BASE = process.env.NEXT_PUBLIC_CDN_BASE_URL || '/mock-cdn';
+  const storageDriver = process.env.STORAGE_DRIVER || 'local';
+  const CDN_BASE =
+    storageDriver === 'r2'
+      ? process.env.CDN_BASE_URL || '/mock-cdn'
+      : process.env.NEXT_PUBLIC_CDN_BASE_URL || '/mock-cdn';
   const unopt = CDN_BASE.startsWith('/');
   return (
     <div className='grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4'>

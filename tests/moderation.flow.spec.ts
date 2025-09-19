@@ -72,7 +72,7 @@ describe('moderation flow', () => {
     await okRes.arrayBuffer();
 
     // Reject via database function directly (bypass auth in test)
-    const { updatePhotoStatus } = await import('../src/lib/db/sqlite');
+    const { updatePhotoStatus } = await import('../src/lib/db/adapters/sqlite');
     updatePhotoStatus(id, 'REJECTED', 'not suitable');
 
     // CDN should block now

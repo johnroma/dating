@@ -4,14 +4,19 @@ import type { NextRequest } from 'next/server';
 // Parse `sess` cookie (dev session) without verifying HMAC here (edge-friendly)
 function parseSessCookie(
   req: NextRequest
-): { role: 'user' | 'moderator' } | null {
+): { role: 'viewer' | 'creator' | 'moderator' } | null {
   const raw = req.cookies.get('sess')?.value;
   if (!raw) return null;
   const [payload] = raw.split('.');
   if (!payload) return null;
   try {
     const json = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-    if (json && (json.role === 'user' || json.role === 'moderator'))
+    if (
+      json &&
+      (json.role === 'viewer' ||
+        json.role === 'creator' ||
+        json.role === 'moderator')
+    )
       return { role: json.role };
   } catch {
     // Ignore parsing errors for session cookie
@@ -33,9 +38,9 @@ export function middleware(req: NextRequest) {
   }
   if (pathname.startsWith('/dev/login')) return NextResponse.next();
 
-  // /upload : allow user or moderator
+  // /upload : allow creator or moderator
   if (pathname.startsWith('/upload')) {
-    if (sess?.role === 'user' || sess?.role === 'moderator')
+    if (sess?.role === 'creator' || sess?.role === 'moderator')
       return NextResponse.next();
     const url = req.nextUrl.clone();
     url.pathname = '/dev/login';

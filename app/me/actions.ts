@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
-import type { Photo } from '@/src/lib/db/types';
+import { getDb } from '@/src/lib/db';
 import { getSession } from '@/src/ports/auth';
 import { getStorage } from '@/src/ports/storage';
 
@@ -11,15 +11,8 @@ export async function deletePhoto(id: string) {
   const sess = await getSession().catch(() => null);
   if (!sess) redirect('/dev/login?from=/me');
 
-  const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
-  const dbMod =
-    driver === 'postgres'
-      ? await import('@/src/lib/db/postgres')
-      : await import('@/src/lib/db/sqlite');
-
-  const photo = await (
-    dbMod as { getPhoto?: (id: string) => Promise<Photo | undefined> }
-  ).getPhoto?.(id);
+  const db = getDb();
+  const photo = await db.getPhoto(id);
   if (!photo) {
     revalidatePath('/me');
     return;
@@ -29,9 +22,7 @@ export async function deletePhoto(id: string) {
   const canDelete = photo.ownerid === sess.userId || sess.role === 'moderator';
   if (!canDelete) return;
 
-  await (
-    dbMod as { softDeletePhoto?: (id: string) => Promise<void> }
-  ).softDeletePhoto?.(id);
+  await db.softDeletePhoto?.(id);
 
   try {
     const storage = await getStorage();

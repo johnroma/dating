@@ -2,6 +2,13 @@
 // Safe to run multiple times. Only runs when DB_DRIVER=sqlite.
 import Database from 'better-sqlite3';
 
+// Simple sql template tag for linting compatibility
+const sql = (strings: TemplateStringsArray, ...values: unknown[]) =>
+  strings.reduce(
+    (result, string, i) => result + string + (values[i] || ''),
+    ''
+  );
+
 function columnExists(db: Database.Database, table: string, col: string) {
   const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{
     name?: string;
@@ -10,14 +17,14 @@ function columnExists(db: Database.Database, table: string, col: string) {
 }
 
 export function ensureSqliteSchema(db: Database.Database) {
-  // Users table (dev/local auth users now; later Supabase-auth users will map to this too)
+  // Members table (dev/local auth members now; later Supabase-auth members will map to this too)
   db.prepare(
     `
-    CREATE TABLE IF NOT EXISTS user (
+    CREATE TABLE IF NOT EXISTS account (
       id TEXT PRIMARY KEY,
       email TEXT,
       displayname TEXT NOT NULL,
-      role TEXT NOT NULL CHECK (role IN ('user','moderator')),
+      role TEXT NOT NULL CHECK (role IN ('member','admin')),
       createdat TEXT NOT NULL DEFAULT (datetime('now')),
       deletedat TEXT
     )
@@ -28,7 +35,7 @@ export function ensureSqliteSchema(db: Database.Database) {
   if (!columnExists(db, 'photo', 'ownerid')) {
     db.prepare(
       `
-      ALTER TABLE photo ADD COLUMN ownerid TEXT NULL REFERENCES user(id) ON DELETE SET NULL
+      ALTER TABLE photo ADD COLUMN ownerid TEXT NULL REFERENCES account(id) ON DELETE SET NULL
     `
     ).run();
   }
@@ -85,13 +92,54 @@ export function ensureSqliteSchema(db: Database.Database) {
   `
   ).run();
 
-  // Seed two dev users for local work. Ids are stable and human-readable.
+  // Seed shared dev members for local work. Ids are stable and database-agnostic.
   db.prepare(
     `
-    INSERT OR IGNORE INTO user (id, email, displayname, role)
+    INSERT OR IGNORE INTO account (id, email, displayname, role)
     VALUES
-      ('sqlite-user', NULL, 'SQLite User', 'user'),
-      ('sqlite-moderator', NULL, 'SQLite Moderator', 'moderator')
+      ('member', NULL, 'Member', 'member'),
+      ('admin', NULL, 'Admin', 'admin')
+  `
+  ).run();
+
+  // Update any existing accounts to use shared naming
+  db.prepare(
+    sql`
+    UPDATE account
+    SET
+      id = 'member',
+      displayname = 'Member'
+    WHERE
+      role = 'member'
+      AND id != 'member'
+  `
+  ).run();
+
+  db.prepare(
+    sql`
+    UPDATE account
+    SET
+      id = 'admin',
+      displayname = 'Admin'
+    WHERE
+      role = 'admin'
+      AND id != 'admin'
+  `
+  ).run();
+
+  // Update photo owners to use shared account IDs
+  db.prepare(
+    sql`
+    UPDATE photo
+    SET
+      ownerid = 'member'
+    WHERE
+      ownerid IN (
+        'sqlite-member',
+        'postgres-member',
+        'sqlite-user',
+        'postgres-user'
+      )
   `
   ).run();
 }

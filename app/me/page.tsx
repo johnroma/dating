@@ -2,7 +2,7 @@
 import Image from 'next/image';
 import { redirect } from 'next/navigation';
 
-import type { Photo } from '@/src/lib/db/types';
+import { getDb } from '@/src/lib/db';
 import { getSession } from '@/src/ports/auth';
 
 import { deletePhoto } from './actions';
@@ -12,15 +12,8 @@ export const dynamic = 'force-dynamic';
 export default async function MePage() {
   const sess = await getSession().catch(() => null);
   if (!sess) redirect('/dev/login?from=/me');
-  const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
-  let photos: Photo[] = [];
-  if (driver === 'postgres') {
-    const { listPhotosByOwner } = await import('@/src/lib/db/postgres');
-    photos = await listPhotosByOwner(sess.userId);
-  } else {
-    const { listPhotosByOwner } = await import('@/src/lib/db/sqlite');
-    photos = listPhotosByOwner(sess.userId);
-  }
+  const db = getDb();
+  const photos = await db.listPhotosByOwner(sess.userId);
 
   return (
     <div>
