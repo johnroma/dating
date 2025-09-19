@@ -136,8 +136,11 @@ The application uses a **two-layer role system** for maximum flexibility and dat
   - `src/lib/quotas.ts`: simple per-role quotas (creator), usage based on counts for now.
   - `src/lib/rate/limiter.ts`: in-memory token bucket; also used by ingest.
   - **Session roles**: `viewer` | `member` | `admin`
-  - **Quota mapping (temporary)**: `admin` → `moderator`, `member`/`viewer` → `creator`
-  - **Middleware gates**: `/upload` = `member` or `admin`; `/moderate` = `admin` only
+  - **Quotas**: now read session roles directly (`viewer` | `member` | `admin`)
+    - `viewer`: no ingest/upload quota (blocked)
+    - `member`: standard quotas
+    - `admin`: elevated quotas
+  - **Gating**: `/upload` = `member` or `admin`; `/moderate` = `admin` only
 - **Dupes (stub)**
   - `src/lib/images/hash.ts` + `src/lib/images/dupes.ts` (Hamming check placeholder).
 

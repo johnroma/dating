@@ -36,6 +36,13 @@ afterAll(() => {
 
 describe('moderation flow', () => {
   it('approves on ingest, can reject/restore, original accessible to moderator', async () => {
+    // Mock session to allow member role for ingest
+    vi.doMock('../src/ports/auth', () => ({
+      getSession: async () => ({ userId: 'test-member', role: 'member' }),
+      setSession: async () => {},
+      clearSession: async () => {},
+    }));
+
     const { POST: upload } = await import('../app/api/ut/upload/route');
     const { POST: ingest } = await import('../app/api/photos/ingest/route');
     const fd = new FormData();

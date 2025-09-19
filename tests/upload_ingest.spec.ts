@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -36,6 +36,13 @@ async function buildTinyPngBlob(): Promise<Blob> {
 }
 
 it('upload then ingest creates files and DB row', async () => {
+  // Mock session to allow member role for ingest
+  vi.doMock('../src/ports/auth', () => ({
+    getSession: async () => ({ userId: 'test-member', role: 'member' }),
+    setSession: async () => {},
+    clearSession: async () => {},
+  }));
+
   const { POST: upload } = await import('../app/api/ut/upload/route');
   const { POST: ingest } = await import('../app/api/photos/ingest/route');
   const fd = new FormData();
