@@ -3,8 +3,10 @@ import crypto from 'node:crypto';
 
 import { cookies } from 'next/headers';
 
+import { readSupabaseSession } from '@/src/lib/auth/supabase-jwt';
+
 export type SessionRole = 'viewer' | 'member' | 'admin';
-export type Session = { userId: string; role: SessionRole };
+export type Session = { userId: string; role: SessionRole; email?: string };
 
 // Map database roles to application roles (now they match directly)
 export function mapDbRoleToAppRole(dbRole: 'member' | 'admin'): SessionRole {
@@ -45,12 +47,10 @@ function decode(token: string | undefined | null): Session | null {
   if (!good) return null;
   try {
     const obj = JSON.parse(b64urlDecode(payload));
-    if (
-      obj &&
-      typeof obj.userId === 'string' &&
-      (obj.role === 'viewer' || obj.role === 'member' || obj.role === 'admin')
-    ) {
-      return { userId: obj.userId, role: obj.role };
+    const role = normalizeRole(obj?.role);
+    if (obj && typeof obj.userId === 'string' && role) {
+      const email = typeof obj.email === 'string' ? obj.email : undefined;
+      return { userId: obj.userId, role, email };
     }
   } catch {
     // ignore malformed payloads
@@ -58,7 +58,32 @@ function decode(token: string | undefined | null): Session | null {
   return null;
 }
 
+function normalizeRole(role: unknown): SessionRole | null {
+  switch (role) {
+    case 'viewer':
+    case 'member':
+    case 'admin':
+      return role;
+    case 'user':
+      return 'member';
+    case 'moderator':
+      return 'admin';
+    default:
+      return null;
+  }
+}
+
 export async function getSession(): Promise<Session | null> {
+  const driver = (
+    process.env.AUTH_DRIVER || (process.env.VERCEL ? 'supabase' : 'dev')
+  ).toLowerCase();
+
+  if (driver === 'supabase') return await readSupabaseSession();
+  if (driver === 'dev') return await readDevSess();
+  return (await readDevSess()) ?? (await readSupabaseSession());
+}
+
+async function readDevSess(): Promise<Session | null> {
   const store = await cookies();
   return decode(store.get(SESS_NAME)?.value);
 }

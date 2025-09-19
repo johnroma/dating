@@ -15,6 +15,41 @@ Purpose: short, practical notes kept in sync with code. Optimized for LLMs and h
   - `/dev/login` chooses between `member` (creator) and `admin` (moderator) accounts.
   - Sets a signed `sess` cookie (HttpOnly) with database-agnostic account IDs.
   - Header shows current session role with a link to `/dev/login`.
+
+## Auth (dev)
+
+**Dev session cookie:** `sess` (mock auth), via `src/ports/auth.ts`.
+`getSession()` returns `{ userId, role: 'viewer' | 'member' | 'admin' }`.
+This is permanent for local dev.
+
+## Auth (Supabase, portable)
+
+- We support Supabase Auth by verifying the access token JWT **server-side** using `SUPABASE_JWT_SECRET` (HS256).
+- No SDK lock-in; this lives behind the **auth port** and can be replaced later.
+- `getSession()` (HYBRID):
+  1. Tries dev `sess` cookie (local).
+  2. If absent, tries Supabase access token from cookies/Authorization and verifies HS256 using `SUPABASE_JWT_SECRET`.
+  3. Maps role: `admin` if the **subject** or **email** matches allowlists; otherwise `member`.
+  4. Returns `{ userId, role }` or `null`.
+
+### Env (add to .env/.vercel)
+
+```
+# Auth driver hint (optional): dev | supabase | hybrid
+# Defaults: 'dev' locally, 'supabase' on Vercel (reads AUTH_DRIVER or VERCEL)
+AUTH_DRIVER=hybrid
+SUPABASE_URL=...                  # for your reference; not used by the verifier
+SUPABASE_JWT_SECRET=...           # Settings → API → JWT secret (HS256)
+# Admin allowlists (optional). Comma-separated IDs/emails.
+AUTH_ADMIN_USER_IDS=
+AUTH_ADMIN_EMAILS=
+```
+
+### Middleware
+
+- For now, middleware continues to gate using **dev `sess`** in local dev.
+- On production with Supabase, **route handlers and Server Actions** still check `getSession()` securely.
+- Once you add a real sign-in UI, we can extend middleware to parse Supabase token at the edge.
 - **Images**
   - Local originals under `.data/storage/photos-orig/` (EXIF kept).
   - Variants WebP (`sm/md/lg`) via `sharp`, served via CDN URLs:
