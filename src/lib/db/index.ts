@@ -2,7 +2,7 @@ export * from './port';
 export { getDb };
 
 import type { DbPort } from './port';
-type AdapterModule = typeof import('./sqlite') & {
+type AdapterModule = typeof import('./adapters/sqlite') & {
   softDeletePhoto?: (id: string) => void | Promise<void>;
   restorePhoto?: (id: string) => void | Promise<void>;
 };
@@ -13,8 +13,8 @@ function load(): Promise<AdapterModule> {
     const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
     cached = (async () => {
       try {
-        if (driver === 'postgres') return await import('./postgres');
-        return await import('./sqlite');
+        if (driver === 'postgres') return await import('./adapters/postgres');
+        return await import('./adapters/sqlite');
       } catch (err: unknown) {
         if (driver !== 'postgres') {
           const e = err as Error & { message: string };
@@ -57,6 +57,24 @@ function getDb(): DbPort {
     countPending: async () => (await load()).countPending(),
     listRecent: async (limit, offset) =>
       (await load()).listRecent(limit, offset),
+    listPhotosByOwner: async ownerId =>
+      (await load()).listPhotosByOwner(ownerId),
+    upsertIngestKey: async (id, photoid) => {
+      const mod = await load();
+      return mod.upsertIngestKey?.(id, photoid);
+    },
+    insertAudit: async audit => {
+      const mod = await load();
+      return mod.insertAudit?.(audit);
+    },
+    listMembers: async () => {
+      const mod = await load();
+      return mod.listMembers?.() ?? [];
+    },
+    updatePhotoStatus: async (id, status, reason) => {
+      const mod = await load();
+      return mod.updatePhotoStatus?.(id, status, reason);
+    },
   } satisfies DbPort;
 }
 

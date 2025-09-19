@@ -94,6 +94,15 @@ describe('ingest route in R2 mode', () => {
       })),
     }));
 
+    // Mock session to allow member role for ingest
+    vi.mock('@/src/ports/auth', () => ({
+      getSession: vi
+        .fn()
+        .mockResolvedValue({ userId: 'test-member', role: 'member' }),
+      setSession: vi.fn(),
+      clearSession: vi.fn(),
+    }));
+
     // Import the route AFTER mocks & env are in place
     const { POST } = await import('@/app/api/photos/ingest/route');
 

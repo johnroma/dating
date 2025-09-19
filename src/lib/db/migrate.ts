@@ -7,10 +7,8 @@ async function main() {
   // Count queries are cheap and force init
   await db.countPending();
   await db.countApproved();
-  console.log('Migration complete (schema ensured by adapter).');
 }
 
-main().catch(err => {
-  console.error(err);
+main().catch(() => {
   process.exit(1);
 });

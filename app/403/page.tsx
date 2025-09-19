@@ -1,13 +1,14 @@
 import Link from 'next/link';
 
-import { getRoleFromCookies } from '../../src/lib/role-cookie';
+import { getSession } from '@/src/ports/auth';
 
 export default async function ForbiddenPage({
   searchParams,
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const role = await getRoleFromCookies();
+  const sess = await getSession().catch(() => null);
+  const role = sess?.role || 'viewer';
   const sp = await searchParams;
   const from = typeof sp?.from === 'string' ? sp.from : undefined;
 
@@ -24,9 +25,9 @@ export default async function ForbiddenPage({
         </p>
       ) : null}
       <p className='mt-4'>
-        Adjust your role on the{' '}
-        <Link className='underline' href='/dev/role'>
-          role switcher
+        Sign in on the{' '}
+        <Link className='underline' href='/dev/login'>
+          dev login
         </Link>
         .
       </p>

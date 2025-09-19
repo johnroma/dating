@@ -11,8 +11,7 @@ import { findDuplicateByHash } from '@/src/lib/images/dupes';
 import { SIZES } from '@/src/lib/images/resize';
 import { enforceQuotaOrThrow, getRoleQuota, getUsage } from '@/src/lib/quotas';
 import { ipFromHeaders, limit } from '@/src/lib/rate/limiter';
-import { COOKIE_NAME } from '@/src/lib/role-cookie';
-import { parseRole, type Role } from '@/src/lib/roles';
+import { getSession } from '@/src/ports/auth';
 import { getStorage } from '@/src/ports/storage';
 
 const LIMIT_INGESTS = Number(process.env.RATE_INGESTS_PER_MINUTE || 60);
@@ -36,14 +35,16 @@ export async function POST(req: Request) {
   };
   if (!key) return NextResponse.json({ error: 'missing_key' }, { status: 400 });
 
-  // Determine actor role via cookie header for quotas/audit
+  // Determine actor role via session (session-only; no legacy role cookie)
   const db = getDb();
-  const cookieHeader = req.headers.get('cookie') || '';
-  const roleCookie = cookieHeader
-    .split(/;\s*/)
-    .map(kv => kv.split('='))
-    .find(([k]) => k === COOKIE_NAME)?.[1];
-  const role = parseRole(roleCookie) as Role;
+  const sess = await getSession().catch(() => null);
+  const session_role =
+    (sess?.role as 'viewer' | 'member' | 'admin') || 'viewer';
+
+  // Block viewers from ingest entirely
+  if (session_role === 'viewer') {
+    return NextResponse.json({ error: 'forbidden_role' }, { status: 403 });
+  }
 
   // Step 7 idempotency (by explicit key or implicit key:<origKey>)
   const idem = idempotencyKey || `key:${key}`;
@@ -58,10 +59,14 @@ export async function POST(req: Request) {
     try {
       const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
       if (driver === 'postgres') {
-        const { upsertIngestKey } = await import('@/src/lib/db/postgres');
+        const { upsertIngestKey } = await import(
+          '@/src/lib/db/adapters/postgres'
+        );
         await upsertIngestKey(idem, existing.id);
       } else {
-        const { upsertIngestKey } = await import('@/src/lib/db/sqlite');
+        const { upsertIngestKey } = await import(
+          '@/src/lib/db/adapters/sqlite'
+        );
         upsertIngestKey(idem, existing.id);
       }
     } catch {
@@ -77,15 +82,7 @@ export async function POST(req: Request) {
 
   // If idem key already seen, return the known photo
   try {
-    const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
-    let state: 'created' | 'exists' = 'created';
-    if (driver === 'postgres') {
-      const { upsertIngestKey } = await import('@/src/lib/db/postgres');
-      state = await upsertIngestKey(idem, candidateId);
-    } else {
-      const { upsertIngestKey } = await import('@/src/lib/db/sqlite');
-      state = upsertIngestKey(idem, candidateId);
-    }
+    const state = (await db.upsertIngestKey?.(idem, candidateId)) ?? 'created';
     if (state === 'exists') {
       const prev = await db.getPhoto(candidateId);
       if (prev) {
@@ -101,11 +98,11 @@ export async function POST(req: Request) {
     // ignore ingest key upsert errors
   }
 
-  // role-based quotas using cookie role from Request headers (avoid Next dynamic API in tests)
-  const quota = getRoleQuota(role);
+  // Quotas now accept session roles directly
+  const quota = getRoleQuota(session_role);
   const usage = await getUsage();
   try {
-    enforceQuotaOrThrow(role, usage, quota);
+    enforceQuotaOrThrow(session_role, usage, quota);
   } catch (e: unknown) {
     const error = e as Error & { code?: string };
     return NextResponse.json(
@@ -114,10 +111,21 @@ export async function POST(req: Request) {
     );
   }
 
-  // optional duplicate detection (stub)
+  // Duplicate detection
   const duplicateOf = pHash ? await findDuplicateByHash(pHash) : undefined;
 
+  // If this is a duplicate, return early without uploading
+  if (duplicateOf) {
+    return NextResponse.json({
+      id: candidateId,
+      status: 'DUPLICATE',
+      sizes: {},
+      duplicateOf,
+    });
+  }
+
   const storage = await getStorage();
+  const ownerId = sess?.userId ?? null;
   const photoId = candidateId; // deterministic id for idempotency
 
   // Read original file via storage adapter (works for both local and R2)
@@ -175,27 +183,21 @@ export async function POST(req: Request) {
     height,
     createdat: new Date().toISOString(),
     phash: pHash || null,
-    duplicateof: duplicateOf || null,
+    duplicateof: null, // No longer needed since we prevent duplicates
+    ownerid: ownerId,
   });
 
   // Audit
   try {
-    const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
     const a = {
       id: crypto.randomUUID(),
       photoid: photoId,
       action: 'INGESTED',
-      actor: String(role),
+      actor: String(session_role),
       reason: null as string | null,
       at: new Date().toISOString(),
     };
-    if (driver === 'postgres') {
-      const { insertAudit } = await import('@/src/lib/db/postgres');
-      await insertAudit(a);
-    } else {
-      const { insertAudit } = await import('@/src/lib/db/sqlite');
-      insertAudit(a);
-    }
+    await db.insertAudit?.(a);
   } catch {
     // ignore audit log errors
   }
@@ -204,6 +206,5 @@ export async function POST(req: Request) {
     id: photoId,
     status: 'APPROVED',
     sizes: sizesjson,
-    duplicateOf: duplicateOf || null,
   });
 }

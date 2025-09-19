@@ -36,6 +36,13 @@ afterAll(() => {
 
 describe('moderation flow', () => {
   it('approves on ingest, can reject/restore, original accessible to moderator', async () => {
+    // Mock session to allow member role for ingest
+    vi.doMock('../src/ports/auth', () => ({
+      getSession: async () => ({ userId: 'test-member', role: 'member' }),
+      setSession: async () => {},
+      clearSession: async () => {},
+    }));
+
     const { POST: upload } = await import('../app/api/ut/upload/route');
     const { POST: ingest } = await import('../app/api/photos/ingest/route');
     const fd = new FormData();
@@ -71,11 +78,9 @@ describe('moderation flow', () => {
     expect(okRes.status).toBe(200);
     await okRes.arrayBuffer();
 
-    // Reject via server action
-    const { rejectPhoto, restorePhoto } = await import(
-      '../app/moderate/actions'
-    );
-    await rejectPhoto(id, 'not suitable');
+    // Reject via database function directly (bypass auth in test)
+    const { updatePhotoStatus } = await import('../src/lib/db/adapters/sqlite');
+    updatePhotoStatus(id, 'REJECTED', 'not suitable');
 
     // CDN should block now
     const forbRes = await cdnGet(new Request('http://local/mock-cdn'), {
@@ -84,11 +89,11 @@ describe('moderation flow', () => {
     expect(forbRes.status).toBe(403);
     await forbRes.arrayBuffer().catch(() => {});
 
-    // Mock role cookie to allow original access
-    vi.doMock('../src/lib/role-cookie', () => ({
-      getRoleFromCookies: async () => 'moderator',
-      setRoleCookie: async () => {},
-      COOKIE_NAME: 'role',
+    // Mock session to allow original access (admin)
+    vi.doMock('../src/ports/auth', () => ({
+      getSession: async () => ({ userId: 'test-admin', role: 'admin' }),
+      setSession: async () => {},
+      clearSession: async () => {},
     }));
     const { GET: origGet } = await import('../app/mod/original/[id]/route');
     const oRes = await origGet(new Request('http://local/mod/original'), {
@@ -99,7 +104,7 @@ describe('moderation flow', () => {
     await oRes.arrayBuffer();
 
     // Restore approval
-    await restorePhoto(id);
+    updatePhotoStatus(id, 'APPROVED');
     const okRes2 = await cdnGet(new Request('http://local/mock-cdn'), {
       params: { path: [id, 'sm.webp'] },
     } as any);

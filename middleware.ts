@@ -1,62 +1,65 @@
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
-import { parseRole } from '@/src/lib/roles';
-
-function buildRedirectURL(req: NextRequest, reason: string) {
-  const url = req.nextUrl.clone();
-  url.pathname = '/dev/role';
-  url.searchParams.set('reason', reason);
-  url.searchParams.set('from', req.nextUrl.pathname);
-  return url;
+// Parse `sess` cookie (dev session) without verifying HMAC here (edge-friendly)
+function parseSessCookie(
+  req: NextRequest
+): { role: 'viewer' | 'member' | 'admin' } | null {
+  const raw = req.cookies.get('sess')?.value;
+  if (!raw) return null;
+  const [payload] = raw.split('.');
+  if (!payload) return null;
+  try {
+    const json = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (
+      json &&
+      (json.role === 'viewer' ||
+        json.role === 'member' ||
+        json.role === 'admin')
+    )
+      return { role: json.role };
+  } catch {
+    // Ignore parsing errors for session cookie
+  }
+  return null;
 }
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const role = parseRole(req.cookies.get('role')?.value);
+  const sess = parseSessCookie(req);
 
-  // Protect /upload
-  if (pathname === '/upload' || pathname.startsWith('/upload/')) {
-    if (!(role === 'creator' || role === 'moderator')) {
-      const noredirect = req.nextUrl.searchParams.get('noredirect') === '1';
-      if (noredirect) {
-        const url = req.nextUrl.clone();
-        url.pathname = '/403';
-        url.searchParams.set('reason', 'forbidden');
-        url.searchParams.set('from', req.nextUrl.pathname);
-        const res = NextResponse.rewrite(url);
-        res.headers.set('x-role', role);
-        return res;
-      }
-      const res = NextResponse.redirect(buildRedirectURL(req, 'forbidden'));
-      res.headers.set('x-role', role);
-      return res;
-    }
+  // public paths
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api/mock') ||
+    pathname.startsWith('/mock-cdn')
+  ) {
+    return NextResponse.next();
+  }
+  if (pathname.startsWith('/dev/login')) return NextResponse.next();
+
+  // /upload : allow member or admin
+  if (pathname.startsWith('/upload')) {
+    if (sess?.role === 'member' || sess?.role === 'admin')
+      return NextResponse.next();
+    const url = req.nextUrl.clone();
+    url.pathname = '/dev/login';
+    url.searchParams.set('from', pathname);
+    return NextResponse.redirect(url);
   }
 
-  // Protect /moderate
-  if (pathname === '/moderate' || pathname.startsWith('/moderate/')) {
-    if (role !== 'moderator') {
-      const noredirect = req.nextUrl.searchParams.get('noredirect') === '1';
-      if (noredirect) {
-        const url = req.nextUrl.clone();
-        url.pathname = '/403';
-        url.searchParams.set('reason', 'forbidden');
-        url.searchParams.set('from', req.nextUrl.pathname);
-        const res = NextResponse.rewrite(url);
-        res.headers.set('x-role', role);
-        return res;
-      }
-      const res = NextResponse.redirect(buildRedirectURL(req, 'forbidden'));
-      res.headers.set('x-role', role);
-      return res;
-    }
+  // /moderate : allow only admin
+  if (pathname.startsWith('/moderate')) {
+    if (sess?.role === 'admin') return NextResponse.next();
+    const url = req.nextUrl.clone();
+    url.pathname = '/dev/login';
+    url.searchParams.set('from', pathname);
+    return NextResponse.redirect(url);
   }
 
-  const res = NextResponse.next();
-  res.headers.set('x-role', role);
-  return res;
+  return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/upload/:path*', '/moderate/:path*'],
+  matcher: ['/upload/:path*', '/moderate/:path*', '/((?!_next|mock-cdn).*)'],
 };

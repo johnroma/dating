@@ -17,6 +17,15 @@ importers:
       '@aws-sdk/s3-request-presigner':
         specifier: ^3.888.0
         version: 3.888.0
+      dating:
+        specifier: 'link:'
+        version: 'link:'
+      dotenv:
+        specifier: ^17.2.2
+        version: 17.2.2
+      lightningcss:
+        specifier: ^1.30.1
+        version: 1.30.1
       mime:
         specifier: ^4.0.4
         version: 4.1.0
@@ -1824,6 +1833,10 @@ packages:
   doctrine@2.1.0:
     resolution: {integrity: sha512-35mSku4ZXK0vfCuHEDAwt55dg2jNajHZ1odvF+8SSr82EsZY4QmXfuWso8oEd8zRhVObSN18aM0CjSdoBX7zIw==}
     engines: {node: '>=0.10.0'}
+
+  dotenv@17.2.2:
+    resolution: {integrity: sha512-Sf2LSQP+bOlhKWWyhFsn0UsfdK/kCWRv1iuA2gXAwt3dyNabr6QSj00I2V10pidqz69soatm9ZwZvpQMTIOd5Q==}
+    engines: {node: '>=12'}
 
   dunder-proto@1.0.1:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
@@ -5421,6 +5434,8 @@ snapshots:
   doctrine@2.1.0:
     dependencies:
       esutils: 2.0.3
+
+  dotenv@17.2.2: {}
 
   dunder-proto@1.0.1:
     dependencies:

@@ -15,6 +15,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:migrate": "node -e \"console.log('SQLite/PG schema ensured on import (Step 7)')\"",
+    "db:setup-postgres": "tsx scripts/setup-postgres.ts",
     "db:seed": "tsx src/lib/db/seed.ts",
     "db:open": "sqlite3 ${DATABASE_FILE:-.data/db/dev.db}",
     "test:sandbox": "MOCK_NATIVE=1 vitest run",
@@ -22,9 +23,11 @@
     "prepare": "husky"
   },
   "dependencies": {
-    "lightningcss": "^1.30.1",
     "@aws-sdk/client-s3": "^3.676.0",
     "@aws-sdk/s3-request-presigner": "^3.888.0",
+    "dating": "link:",
+    "dotenv": "^17.2.2",
+    "lightningcss": "^1.30.1",
     "mime": "^4.0.4",
     "next": "latest",
     "npm-check-updates": "^18.1.1",

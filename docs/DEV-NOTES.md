@@ -5,24 +5,108 @@ Purpose: short, practical notes kept in sync with code. Optimized for LLMs and h
 ## Current Setup (server-first, no real auth yet)
 
 - **Roles & gating**
-  - Types: `Role = 'viewer' | 'creator' | 'moderator'` in `src/lib/roles.ts`.
+  - Types: `Role = 'viewer' | 'creator' | 'moderator'` in `src/lib/roles.ts` (3 application roles).
+  - Database roles: `'member' | 'admin'` (database-agnostic account IDs).
   - Middleware (`middleware.ts`) protects routes:
     - `/upload/**` → `creator|moderator`
     - `/moderate/**` → `moderator`
-    - On block: redirect to `/dev/role?reason=forbidden&from=…`, or rewrite to `/403` if `?noredirect=1`. Always sets `x-role` response header for debug.
-- **Role UX**
-  - `/dev/role` (Server) + `components/RoleSwitcher.tsx` (Client) set a non-HttpOnly `role` cookie via server action.
-  - Header shows current role with a link to switcher; `app/403` explains why access was denied.
+    - On block: redirect to `/dev/login?from=…`. Always sets `x-role` response header for debug.
+- **Dev login**
+  - `/dev/login` chooses between `member` (creator) and `admin` (moderator) accounts.
+  - Sets a signed `sess` cookie (HttpOnly) with database-agnostic account IDs.
+  - Header shows current session role with a link to `/dev/login`.
 - **Images**
   - Local originals under `.data/storage/photos-orig/` (EXIF kept).
-  - Variants WebP (`sm/md/lg`) via `sharp`, served either:
-    - **Local** via `/mock-cdn/<photoId>/<size>.webp`
-    - **R2/S3** via `CDN_BASE_URL/cdn/<photoId>/<size>.webp`
+  - Variants WebP (`sm/md/lg`) via `sharp`, served via CDN URLs:
+    - **Local storage**: Uses `NEXT_PUBLIC_CDN_BASE_URL` (defaults to `/mock-cdn`)
+    - **R2 storage**: Uses `CDN_BASE_URL` (R2 CDN domain)
+    - CDN URL logic: `STORAGE_DRIVER=r2` → `CDN_BASE_URL`, `STORAGE_DRIVER=local` → `NEXT_PUBLIC_CDN_BASE_URL`
 - **Pages**
   - `/` gallery (viewer sees approved; moderator sees recent + status chips)
-  - `/upload` uploader (gated)
-  - `/moderate` list + actions (reject/restore; “Inspect original”)
-  - `/p/[id]` photo detail (shows “Inspect original” for moderators)
+  - `/upload` uploader (gated to creator/moderator)
+  - `/moderate` list + actions (reject/restore; "Inspect original") - moderator only
+  - `/me` user's own photos (creator/moderator can delete their own)
+  - `/p/[id]` photo detail (shows "Inspect original" for moderators)
+
+---
+
+## Users & Roles (database-agnostic)
+
+### **Two-Layer Role System**
+
+The application uses a **two-layer role system** for maximum flexibility and database portability:
+
+#### **1. Database Layer (Simple & Portable)**
+
+- **Database roles**: `member` and `admin` (stored in `account.role`)
+- **Database-agnostic account IDs**: `member` and `admin` work with both SQLite and PostgreSQL
+- **Purpose**: Simple, portable account management that works across different databases
+
+#### **2. Application Layer (Rich Permissions)**
+
+- **Application roles**: `viewer`, `creator`, `moderator` (used throughout the app)
+- **Role mapping**:
+  - `member` (database) → `creator` (application)
+  - `admin` (database) → `moderator` (application)
+- **Purpose**: Rich permission system for fine-grained access control
+
+### **Permission Matrix**
+
+| Application Role | View Photos | Upload Photos | Delete Own Photos | Moderate All | View Originals | Delete Any Photo |
+| ---------------- | ----------- | ------------- | ----------------- | ------------ | -------------- | ---------------- |
+| `viewer`         | ✅ Approved | ❌            | ❌                | ❌           | ❌             | ❌               |
+| `creator`        | ✅ Approved | ✅            | ✅                | ❌           | ❌             | ❌               |
+| `moderator`      | ✅ All      | ✅            | ✅                | ✅           | ✅             | ✅               |
+
+### **Route Protection**
+
+- **`/`** (gallery): All roles (viewer sees approved, moderator sees all)
+- **`/upload`**: `creator` and `moderator` only
+- **`/me`**: `creator` and `moderator` only (own photos)
+- **`/moderate`**: `moderator` only
+- **`/mod/original/[id]`**: `moderator` only (view originals)
+
+### **Implementation Details**
+
+- **Session storage**: Stores application role (`creator` or `moderator`) in signed cookie
+- **Role derivation**: `mapDbRoleToAppRole()` converts database role to application role
+- **Middleware**: Uses application roles for route protection
+- **UI display**: Shows application role in navigation header
+
+### **Database Schema**
+
+- **`account` table**: `id`, `displayname`, `role` (`member`|`admin`), `createdat`, `deletedat`
+- **`photo` table**: `ownerid` references `account.id` with foreign key constraint
+- **Seeded accounts**: `member` (creator) and `admin` (moderator)
+
+### **Benefits**
+
+- **Database portability**: Switch between SQLite and PostgreSQL without code changes
+- **Simple database schema**: Only 2 database roles to manage
+- **Rich application logic**: 3-tier permission system for complex access control
+- **Clear separation**: Database concerns vs. application business logic
+
+---
+
+## Database Architecture (Step 3 - Refactored)
+
+- **Unified Interface**: Both SQLite and Postgres implement the same `DbPort` interface in `src/lib/db/port.ts`
+- **Adapter Structure**:
+  - `src/lib/db/adapters/sqlite.ts` - Synchronous SQLite operations
+  - `src/lib/db/adapters/postgres.ts` - Asynchronous PostgreSQL operations
+  - `src/lib/db/adapters/common.ts` - Shared utilities and mapping functions
+- **Schema Management**:
+  - `src/lib/db/ensure-sqlite.ts` - SQLite schema creation and migration
+  - `src/lib/db/ensure-postgres.ts` - PostgreSQL schema creation and migration
+  - Both use `CREATE TABLE IF NOT EXISTS` and `ALTER TABLE ADD COLUMN IF NOT EXISTS` for safe migrations
+- **Table Names**:
+  - `account` table (database-agnostic account management)
+  - `photo` table with `ownerid` column referencing `account.id`
+  - `ingestkeys` and `auditlog` tables for idempotency and auditing
+- **Connection Management**:
+  - SQLite: File-based with connection pooling
+  - PostgreSQL: Pool-based with schema caching to prevent connection exhaustion
+- **Type Safety**: All functions return consistent types (`Photo | undefined` instead of `Photo | null`)
 
 ---
 
@@ -51,6 +135,12 @@ Purpose: short, practical notes kept in sync with code. Optimized for LLMs and h
 - **Quotas & rate limits**
   - `src/lib/quotas.ts`: simple per-role quotas (creator), usage based on counts for now.
   - `src/lib/rate/limiter.ts`: in-memory token bucket; also used by ingest.
+  - **Session roles**: `viewer` | `member` | `admin`
+  - **Quotas**: now read session roles directly (`viewer` | `member` | `admin`)
+    - `viewer`: no ingest/upload quota (blocked)
+    - `member`: standard quotas
+    - `admin`: elevated quotas
+  - **Gating**: `/upload` = `member` or `admin`; `/moderate` = `admin` only
 - **Dupes (stub)**
   - `src/lib/images/hash.ts` + `src/lib/images/dupes.ts` (Hamming check placeholder).
 
@@ -62,20 +152,21 @@ Purpose: short, practical notes kept in sync with code. Optimized for LLMs and h
   - Body: `{ key, pHash?, idempotencyKey? }`
   - Derives deterministic `photoId` from `idempotencyKey || "key:"+key` (sha256 → 24 hex).
   - If `{ key }` already ingested, or `idempotencyKey` seen, returns the existing photo.
-  - Enforces per-role quotas (reads `role` from cookie header to avoid dynamic API in tests).
+  - Enforces per-role quotas (reads `role` from session cookie to avoid dynamic API in tests).
   - Generates 3 WebP variants and uploads via storage driver (and copies original to R2 in R2 mode).
-  - Inserts row with `status: 'APPROVED'` and writes an `AuditLog: 'INGESTED'`.
+  - Inserts row with `status: 'APPROVED'` and `ownerid` from session, writes an `AuditLog: 'INGESTED'`.
 - **Soft delete / restore / hard delete** (moderator only)
-  - `POST /api/photos/[id]/soft-delete` → sets `deletedAt` (hidden from gallery/CDN; originals blocked)
-  - `POST /api/photos/[id]/restore` → clears `deletedAt`
-  - `DELETE /api/photos/[id]` → calls `storage.deleteAllForPhoto` then removes DB row; writes `AuditLog: 'DELETED'`
+  - Server action `softDeletePhoto(id)` → sets `deletedAt` (hidden from gallery/CDN; originals blocked)
+  - Server action `setPhotoStatus(id, 'APPROVED')` → clears `deletedAt`
+  - Server action `deletePhoto(id)` → calls `storage.deleteAllForPhoto` then removes DB row; writes `AuditLog: 'DELETED'`
   - `/mock-cdn/**` refuses when `deletedAt` is set; moderators can still view non-approved (but not deleted).
 - **Tables & columns**
-  - `Photo`: `id, status, origKey, sizesJson, width, height, createdAt`
-    - plus lifecycle: `updatedAt, rejectionReason, pHash, duplicateOf, deletedAt`
-    - indices: `(status, createdAt DESC)`, `deletedAt`
-  - `IngestKeys(id PK, photoId, createdAt)` — for idempotency
-  - `AuditLog(id PK, photoId, action, actor, reason?, at)` — for auditing
+  - `account`: `id, email, displayname, role, createdat, deletedat` — user accounts (database-agnostic IDs)
+  - `photo`: `id, status, origkey, sizesjson, width, height, createdat, updatedat, rejectionreason, phash, duplicateof, ownerid, deletedat`
+    - indices: `(status, createdat DESC)`, `(ownerid)`, `(deletedat)`
+    - `ownerid` references `account.id` with foreign key constraint
+  - `ingestkeys`: `id, photoid, createdat` — for idempotency
+  - `auditlog`: `id, photoid, action, actor, reason, at` — for auditing
 - **Jobs**
   - `src/ports/jobs.ts` provides an inline (no-op) job runner now; swappable later.
 
@@ -85,9 +176,7 @@ Purpose: short, practical notes kept in sync with code. Optimized for LLMs and h
 
 - `POST /api/ut/upload` (multipart `file`) → `{ key, pHash }`
 - `POST /api/photos/ingest` → `{ id, status, sizes, duplicateOf? }`
-- `POST /api/photos/[id]/soft-delete` → `{ ok: true }` (moderator)
-- `POST /api/photos/[id]/restore` → `{ ok: true }` (moderator)
-- `DELETE /api/photos/[id]` → `{ ok: true }` (moderator)
+- Server actions: `approvePhoto(id)`, `rejectPhoto(id, formData)`, `setPhotoStatus(id, status, reason)`, `softDeletePhoto(id)`, `deletePhoto(id)`
 - `GET /mock-cdn/<id>/<size>.webp` → WebP bytes (410 in R2 mode; 403 when blocked)
 - `GET /mod/original/[id]` → stream (local) or 302 to presigned (R2); moderator only.
 
@@ -114,9 +203,25 @@ Purpose: short, practical notes kept in sync with code. Optimized for LLMs and h
 
 ---
 
+## Development Workflow
+
+- **Database Switching**: Set `DB_DRIVER=sqlite` or `DB_DRIVER=postgres` in `.env.local`
+- **Schema Setup**:
+  - SQLite: Automatic on first run
+  - PostgreSQL: Run `pnpm db:setup-postgres` or use Supabase dashboard
+- **Scripts**:
+  - `scripts/db-utils.ts` - Core database utilities for reliable operations
+  - `scripts/README-db-utils.md` - Documentation for database utilities
+- **Clean Code**: All temporary debug code, console.log statements, and TODO comments have been removed for production readiness
+- **Database Management**: Use `scripts/db-utils.ts` for all database operations instead of temporary scripts
+
 ## Gotchas / Tips
 
 - Always export `export const runtime = 'nodejs'` in API routes using FS/`sharp`.
 - In R2 mode `/mock-cdn/**` returns **410 Gone** by design; UI should use adapter URLs.
 - Originals keep EXIF; variants are stripped by WebP defaults.
-- When switching to Postgres/Supabase, no call-site changes: only envs.
+- When switching between SQLite and PostgreSQL, no call-site changes: only environment variables.
+- Both database adapters implement identical interfaces - switch between them seamlessly.
+- Schema migrations are idempotent and safe to run multiple times.
+- Account IDs are database-agnostic (`member`, `admin`) - no need to migrate data when switching databases.
+- CDN URLs automatically adapt based on storage driver configuration.

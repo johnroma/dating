@@ -3,8 +3,8 @@ import { Inter } from 'next/font/google';
 import Link from 'next/link';
 import React from 'react';
 
-import { getRoleFromCookies } from '../src/lib/role-cookie';
 import './globals.css';
+import { getSession } from '@/src/ports/auth';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -23,19 +23,40 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const role = await getRoleFromCookies();
+  const sess = await getSession().catch(() => null);
   return (
     <html lang='en'>
       <body className={inter.className}>
         <header className='flex items-center justify-between border-b px-4 py-2 text-sm'>
-          <Link className='font-semibold' href='/'>
-            Dating
-          </Link>
-          <div>
-            Role: <span className='font-mono'>{role}</span>{' '}
-            <Link className='underline' href='/dev/role'>
-              (switch)
+          <div className='flex items-center gap-4'>
+            <Link className='font-semibold' href='/'>
+              Dating
             </Link>
+            <nav className='flex items-center gap-3'>
+              <Link href='/'>Home</Link>
+              <Link href='/upload'>Upload</Link>
+              <Link href='/moderate'>Moderate</Link>
+              <Link href='/me'>My photos</Link>
+            </nav>
+          </div>
+          <div className='flex items-center gap-1'>
+            {sess ? (
+              <>
+                <span>User:</span>
+                <span className='font-mono font-semibold'>{sess.userId}</span>
+                <span className='font-mono'>({sess.role})</span>
+                <Link className='underline' href='/dev/login'>
+                  (switch)
+                </Link>
+              </>
+            ) : (
+              <>
+                <span>Anon</span>
+                <Link className='underline' href='/dev/login'>
+                  (login)
+                </Link>
+              </>
+            )}
           </div>
         </header>
         {children}

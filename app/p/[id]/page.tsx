@@ -3,7 +3,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 
 import { getDb } from '@/src/lib/db';
-import { getRoleFromCookies } from '@/src/lib/role-cookie';
+import { getSession } from '@/src/ports/auth';
 
 export default async function PhotoPage({
   params,
@@ -13,9 +13,10 @@ export default async function PhotoPage({
   noStore();
   const { id } = await params;
   const db = getDb();
-  const role = await getRoleFromCookies();
+  const sess = await getSession().catch(() => null);
   const photo = await db.getPhoto(id);
-  if (!photo) {
+  // snake_case: deletedat
+  if (!photo || photo.deletedat) {
     return (
       <main className='mx-auto max-w-3xl p-6'>
         <p className='text-sm text-gray-600'>Photo not found.</p>
@@ -27,7 +28,11 @@ export default async function PhotoPage({
   }
 
   const url = photo.sizesjson?.lg || photo.sizesjson?.md || photo.sizesjson?.sm;
-  const CDN_BASE = process.env.NEXT_PUBLIC_CDN_BASE_URL || '/mock-cdn';
+  const storageDriver = process.env.STORAGE_DRIVER || 'local';
+  const CDN_BASE =
+    storageDriver === 'r2'
+      ? process.env.CDN_BASE_URL || '/mock-cdn'
+      : process.env.NEXT_PUBLIC_CDN_BASE_URL || '/mock-cdn';
   const unopt = CDN_BASE.startsWith('/');
 
   return (
@@ -36,7 +41,7 @@ export default async function PhotoPage({
         <Link className='underline' href='/'>
           ← Back to gallery
         </Link>
-        {role === 'moderator' ? (
+        {sess?.role === 'admin' ? (
           <Link className='underline' href={`/mod/original/${photo.id}`}>
             Inspect original
           </Link>

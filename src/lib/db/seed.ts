@@ -12,10 +12,8 @@ async function main() {
     height: null,
     createdat: new Date().toISOString(),
   });
-  console.log('Seed inserted:', id);
 }
 
-main().catch(err => {
-  console.error(err);
+main().catch(() => {
   process.exit(1);
 });

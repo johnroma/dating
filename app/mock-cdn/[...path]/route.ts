@@ -3,6 +3,8 @@
  */
 import { NextResponse } from 'next/server';
 
+import { localCdnRoot } from '@/src/lib/storage/paths';
+
 export const dynamic = 'force-dynamic';
 // At build time, Next inlines process.env.*; the unused branch is dead-code-eliminated.
 // Note: Next requires segment config to be static. Use Node runtime
@@ -24,7 +26,6 @@ export async function GET(
   // LOCAL DEV: stream the prebuilt WebP from disk (no sharp).
   const { join } = await import('node:path');
   const { createReadStream, statSync } = await import('node:fs');
-  const { Readable } = await import('node:stream');
 
   const { path: segs } = await ctx.params;
   const [photoId, file] = [segs?.[0], segs?.[1]]; // e.g. sm.webp | md.webp | lg.webp
@@ -34,20 +35,29 @@ export async function GET(
 
   // Enforce status: only APPROVED are publicly served for non-moderators
   try {
-    const [{ getDb }, { COOKIE_NAME }, { parseRole }] = await Promise.all([
-      import('@/src/lib/db'),
-      import('@/src/lib/role-cookie'),
-      import('@/src/lib/roles'),
-    ]);
+    const [{ getDb }] = await Promise.all([import('@/src/lib/db')]);
     const db = getDb();
     const photo = await db.getPhoto(photoId);
+    // Parse sess cookie from raw header (no HMAC verify here)
     const cookie = _req.headers.get('cookie') || '';
-    const roleCookie = cookie
+    const sessRaw = cookie
       .split(/;\s*/)
       .map(kv => kv.split('='))
-      .find(([k]) => k === COOKIE_NAME)?.[1];
-    const role = parseRole(roleCookie);
-    const isModerator = role === 'moderator';
+      .find(([k]) => k === 'sess')?.[1];
+    let isModerator = false;
+    if (sessRaw) {
+      const [payload] = sessRaw.split('.');
+      if (payload) {
+        try {
+          const json = JSON.parse(
+            Buffer.from(payload, 'base64url').toString('utf8')
+          );
+          isModerator = json?.role === 'admin';
+        } catch {
+          // Ignore parsing errors for session cookie
+        }
+      }
+    }
     if (
       !photo ||
       photo.deletedat ||
@@ -59,26 +69,35 @@ export async function GET(
     // If anything goes wrong enforcing, fall through to 404/serve from disk
   }
 
-  const abs = join(
-    process.cwd(),
-    '.data',
-    'storage',
-    'photos-cdn',
-    photoId,
-    file
-  );
+  const root = localCdnRoot();
+  const abs = join(root, photoId, file);
   try {
     const st = statSync(abs);
     const nodeStream = createReadStream(abs);
-    const webStream = Readable.toWeb(nodeStream) as unknown as ReadableStream;
-    return new NextResponse(webStream, {
+
+    // Convert Node.js ReadStream to web-compatible ReadableStream
+    const webStream = new ReadableStream({
+      start(controller) {
+        nodeStream.on('data', chunk => controller.enqueue(chunk));
+        nodeStream.on('end', () => controller.close());
+        nodeStream.on('error', error => controller.error(error));
+      },
+      cancel() {
+        nodeStream.destroy();
+      },
+    });
+
+    const res = new NextResponse(webStream, {
       headers: {
         'Content-Type': 'image/webp',
         'Content-Length': String(st.size),
         'Cache-Control': 'public, max-age=31536000, immutable',
       },
     });
+
+    return res;
   } catch {
-    return new NextResponse(null, { status: 404 });
+    const res = new NextResponse(null, { status: 404 });
+    return res;
   }
 }

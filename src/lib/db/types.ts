@@ -13,4 +13,5 @@ export type Photo = {
   duplicateof?: string | null;
   rejectionreason?: string | null;
   deletedat?: string | null;
+  ownerid?: string | null;
 };

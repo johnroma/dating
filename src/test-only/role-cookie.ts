@@ -1,3 +1,5 @@
+// Test-only helper retained for backward-compat in unit tests that mocked
+// the legacy role cookie path. Real app code no longer imports this module.
 import { cookies } from 'next/headers';
 
 import { parseRole, type Role } from '@/src/lib/roles';
