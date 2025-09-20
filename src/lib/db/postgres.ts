@@ -4,16 +4,29 @@ const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error('DATABASE_URL is not set');
 
 function resolveSsl(): NonNullable<PoolConfig['ssl']> {
-  // Default: strict verify (recommended with direct db.<ref>.supabase.co)
-  if (process.env.PGSSL_NO_VERIFY === '1') {
+  // Allow either env name to disable verification (preview/testing convenience)
+  const noVerify =
+    process.env.PGSSL_NO_VERIFY === '1' ||
+    process.env.PG_FORCE_NO_VERIFY === '1';
+
+  if (noVerify) {
+    if (process.env.PG_LOG_SSL_MODE === '1') {
+      console.info('PG SSL mode: no-verify (rejectUnauthorized=false)');
+    }
     return { rejectUnauthorized: false } as const;
   }
+
   const caB64 = process.env.PG_CA_CERT_B64;
   if (caB64) {
-    return {
-      rejectUnauthorized: true,
-      ca: Buffer.from(caB64, 'base64').toString('utf8'),
-    } as const;
+    const ca = Buffer.from(caB64, 'base64').toString('utf8');
+    if (process.env.PG_LOG_SSL_MODE === '1') {
+      console.info('PG SSL mode: verify-ca (custom CA provided)');
+    }
+    return { rejectUnauthorized: true, ca } as const;
+  }
+
+  if (process.env.PG_LOG_SSL_MODE === '1') {
+    console.info('PG SSL mode: verify (system trust store)');
   }
   return { rejectUnauthorized: true } as const;
 }

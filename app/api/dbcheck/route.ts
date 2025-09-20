@@ -24,7 +24,9 @@ function parseConnectionString(connectionString: string): ConnectionConfig {
 }
 
 function sslConfig() {
-  const forceNoVerify = process.env.PG_FORCE_NO_VERIFY === '1';
+  const forceNoVerify =
+    process.env.PG_FORCE_NO_VERIFY === '1' ||
+    process.env.PGSSL_NO_VERIFY === '1';
   const caB64 = process.env.PG_CA_CERT_B64 || '';
 
   if (forceNoVerify) {
