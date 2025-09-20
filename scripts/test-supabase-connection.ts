@@ -6,6 +6,14 @@
 
 import { Client } from 'pg';
 
+// Type for database connection errors
+type DatabaseError = Error & {
+  code?: string;
+  errno?: number;
+  syscall?: string;
+  hostname?: string;
+};
+
 // Use the original Supabase connection string without modifications
 const connectionString =
   process.env.DATABASE_URL?.replace(/[?&]sslmode=require/, '') || '';
@@ -54,10 +62,10 @@ async function testSupabaseConnection() {
     console.error('❌ Connection test failed:', error);
     console.error('Error details:', {
       message: (error as Error).message,
-      code: (error as any).code,
-      errno: (error as any).errno,
-      syscall: (error as any).syscall,
-      hostname: (error as any).hostname,
+      code: (error as DatabaseError).code,
+      errno: (error as DatabaseError).errno,
+      syscall: (error as DatabaseError).syscall,
+      hostname: (error as DatabaseError).hostname,
     });
   } finally {
     await client.end();

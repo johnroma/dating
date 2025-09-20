@@ -6,6 +6,14 @@
 
 import { Client } from 'pg';
 
+// Type for database connection errors
+type DatabaseError = Error & {
+  code?: string;
+  errno?: number;
+  syscall?: string;
+  hostname?: string;
+};
+
 // Build connection string and SSL options from env (same as postgres.ts)
 const urlRaw = process.env.DATABASE_URL || '';
 const connectionString = urlRaw
@@ -67,10 +75,10 @@ async function testSimpleConnection() {
     console.error('❌ Connection test failed:', error);
     console.error('Error details:', {
       message: (error as Error).message,
-      code: (error as any).code,
-      errno: (error as any).errno,
-      syscall: (error as any).syscall,
-      hostname: (error as any).hostname,
+      code: (error as DatabaseError).code,
+      errno: (error as DatabaseError).errno,
+      syscall: (error as DatabaseError).syscall,
+      hostname: (error as DatabaseError).hostname,
     });
   } finally {
     await client.end();
