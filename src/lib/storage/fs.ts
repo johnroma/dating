@@ -25,11 +25,9 @@ export async function writeOriginal(key: string, buf: Buffer): Promise<void> {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     await fs.promises.writeFile(abs, buf);
   } catch (error) {
-    console.error('File system error in writeOriginal:', {
-      key,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    throw error;
+    throw new Error(
+      `Failed to write original file ${key}: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
   }
 }
 
@@ -44,12 +42,9 @@ export async function writeVariant(
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     await fs.promises.writeFile(abs, buf);
   } catch (error) {
-    console.error('File system error in writeVariant:', {
-      photoId,
-      size,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    throw error;
+    throw new Error(
+      `Failed to write variant ${photoId}/${size}: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
   }
 }
 
@@ -57,11 +52,9 @@ export function readStream(absPath: string): Readable {
   try {
     return fs.createReadStream(absPath);
   } catch (error) {
-    console.error('File system error in readStream:', {
-      absPath,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    throw error;
+    throw new Error(
+      `Failed to create read stream for ${absPath}: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
   }
 }
 

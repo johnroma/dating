@@ -91,11 +91,7 @@ export async function POST(req: Request) {
     const pHash = await dHashHex(buf);
 
     return NextResponse.json({ key, pHash });
-  } catch (error) {
-    console.error('Upload error:', {
-      key,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
+  } catch {
     return NextResponse.json(
       { error: 'storage_failed', message: 'Failed to save file' },
       { status: 500 }

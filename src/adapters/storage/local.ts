@@ -44,11 +44,9 @@ async function writeOriginal(key: string, buf: Buffer): Promise<void> {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     await fs.promises.writeFile(abs, buf);
   } catch (error) {
-    console.error('Local storage error in writeOriginal:', {
-      key,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    throw error;
+    throw new Error(
+      `Failed to write original file ${key}: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
   }
 }
 
@@ -63,12 +61,9 @@ async function writeVariant(
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     await fs.promises.writeFile(abs, buf);
   } catch (error) {
-    console.error('Local storage error in writeVariant:', {
-      photoId,
-      size,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    throw error;
+    throw new Error(
+      `Failed to write variant ${photoId}/${size}: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
   }
 }
 
@@ -105,11 +100,9 @@ export const storage: StoragePort = {
       const p = path.join(localOrigRoot(), origKey);
       return await fs.promises.readFile(p);
     } catch (error) {
-      console.error('Local storage error in readOriginalBuffer:', {
-        origKey,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-      throw error;
+      throw new Error(
+        `Failed to read original file ${origKey}: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     }
   },
 };

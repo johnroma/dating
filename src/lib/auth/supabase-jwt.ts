@@ -35,7 +35,7 @@ function getJwks() {
     } else {
       // For SQLite tests, return null to avoid any network calls
       // The readSupabaseSession function will handle this gracefully
-      cachedJwks = null as any;
+      cachedJwks = null as unknown as ReturnType<typeof createRemoteJWKSet>;
     }
   }
   return cachedJwks;
@@ -100,13 +100,8 @@ export async function readSupabaseSession(): Promise<Session> {
       try {
         // Auto-create database account for new Supabase users
         await createDatabaseAccountForSupabaseUser(userId, email);
-      } catch (error) {
+      } catch {
         // If account creation fails, log but don't block authentication
-        console.error('Failed to create database account for Supabase user:', {
-          userId: `${userId.slice(0, 8)}...`,
-          email,
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
         // Continue with authentication even if account creation fails
         // The user will get an error when trying to upload, but can still browse
       }
@@ -139,11 +134,17 @@ async function checkUserExistsInDatabase(userId: string): Promise<boolean> {
 
       // Use the listMembers function to check if user exists
       // Handle both sync (SQLite) and async (PostgreSQL) versions
-      const membersResult = (db as any).listMembers?.();
+      const membersResult = (
+        db as {
+          listMembers?: () =>
+            | Promise<Array<{ id: string }>>
+            | Array<{ id: string }>;
+        }
+      ).listMembers?.();
       const members =
         membersResult instanceof Promise ? await membersResult : membersResult;
       const exists = (members || []).some(
-        (member: any) => member.id === userId
+        (member: { id: string }) => member.id === userId
       );
 
       return exists;
@@ -204,12 +205,9 @@ async function createDatabaseAccountForSupabaseUser(
       await pool.end();
     }
   } catch (error) {
-    // Log error and re-throw for proper error handling
-    console.error('Failed to create database account for Supabase user:', {
-      userId: `${userId.slice(0, 8)}...`,
-      email: email || 'No email provided',
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-    throw error;
+    // Re-throw with context for proper error handling
+    throw new Error(
+      `Failed to create database account for Supabase user: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
   }
 }

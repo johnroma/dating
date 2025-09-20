@@ -1,5 +1,8 @@
 import dns from 'node:dns';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ErrnoException = any;
+
 let applied = false;
 
 export function ensureLocalhostDnsResolution() {
@@ -10,8 +13,15 @@ export function ensureLocalhostDnsResolution() {
   // @ts-expect-error - We're patching the DNS lookup function
   dns.lookup = function patchedLookup(
     hostname: string,
-    options: any,
-    callback?: any
+    options:
+      | number
+      | { family?: number }
+      | ((err: ErrnoException | null, address: string, family: number) => void),
+    callback?: (
+      err: ErrnoException | null,
+      address: string,
+      family: number
+    ) => void
   ) {
     if (hostname === 'localhost') {
       let family = 4;
@@ -32,7 +42,10 @@ export function ensureLocalhostDnsResolution() {
       return;
     }
 
-    return originalLookup.apply(this, arguments as any);
+    return originalLookup.apply(
+      this,
+      arguments as unknown as Parameters<typeof dns.lookup>
+    );
   };
 
   if (dns.promises?.lookup) {

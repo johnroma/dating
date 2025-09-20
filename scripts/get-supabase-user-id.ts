@@ -32,7 +32,14 @@ async function getSupabaseUserId() {
     process.env.DB_DRIVER = 'postgres';
     const { getDb } = await import('../src/lib/db');
     const db = getDb();
-    const users = (await (db as any).listMembers?.()) || [];
+    const users =
+      (await (
+        db as {
+          listMembers?: () => Promise<
+            Array<{ id: string; displayName: string; role: string }>
+          >;
+        }
+      ).listMembers?.()) || [];
     console.table(users);
   } catch (error) {
     console.error('Error:', error);

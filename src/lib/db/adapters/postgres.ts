@@ -176,10 +176,22 @@ export const getPhoto: DbPort['getPhoto'] = async id => {
       setTimeout(() => reject(new Error('Query timeout')), 3000);
     });
 
-    const { rows } = (await Promise.race([
-      queryPromise,
-      timeoutPromise,
-    ])) as any;
+    const { rows } = (await Promise.race([queryPromise, timeoutPromise])) as {
+      rows: Array<{
+        id: string;
+        status: string;
+        origkey: string;
+        sizesjson: string;
+        width: number | null;
+        height: number | null;
+        createdat: string;
+        updatedat: string;
+        rejectionreason: string | null;
+        phash: string | null;
+        duplicateof: string | null;
+        ownerid: string | null;
+      }>;
+    };
     if (!rows[0]) return undefined;
     return rowToPhoto(rows[0]);
   } catch (error) {
@@ -200,10 +212,22 @@ export const getByOrigKey: DbPort['getByOrigKey'] = async origkey => {
       setTimeout(() => reject(new Error('Query timeout')), 3000);
     });
 
-    const { rows } = (await Promise.race([
-      queryPromise,
-      timeoutPromise,
-    ])) as any;
+    const { rows } = (await Promise.race([queryPromise, timeoutPromise])) as {
+      rows: Array<{
+        id: string;
+        status: string;
+        origkey: string;
+        sizesjson: string;
+        width: number | null;
+        height: number | null;
+        createdat: string;
+        updatedat: string;
+        rejectionreason: string | null;
+        phash: string | null;
+        duplicateof: string | null;
+        ownerid: string | null;
+      }>;
+    };
     if (!rows[0]) return undefined;
     return rowToPhoto(rows[0]);
   } catch (error) {
@@ -226,7 +250,22 @@ export const listApproved: DbPort['listApproved'] = async (
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Query timeout')), 3000)
       ),
-    ])) as any;
+    ])) as {
+      rows: Array<{
+        id: string;
+        status: string;
+        origkey: string;
+        sizesjson: string;
+        width: number | null;
+        height: number | null;
+        createdat: string;
+        updatedat: string;
+        rejectionreason: string | null;
+        phash: string | null;
+        duplicateof: string | null;
+        ownerid: string | null;
+      }>;
+    };
     return rows.map(rowToPhoto);
   } catch (error) {
     console.error('Database error in listApproved:', error);
@@ -249,7 +288,22 @@ export const listPending: DbPort['listPending'] = async (
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Query timeout')), 3000)
       ),
-    ])) as any;
+    ])) as {
+      rows: Array<{
+        id: string;
+        status: string;
+        origkey: string;
+        sizesjson: string;
+        width: number | null;
+        height: number | null;
+        createdat: string;
+        updatedat: string;
+        rejectionreason: string | null;
+        phash: string | null;
+        duplicateof: string | null;
+        ownerid: string | null;
+      }>;
+    };
     return rows.map(rowToPhoto);
   } catch (error) {
     console.error('Database error in listPending:', error);
@@ -272,7 +326,22 @@ export const listRecent: DbPort['listRecent'] = async (
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Query timeout')), 3000)
       ),
-    ])) as any;
+    ])) as {
+      rows: Array<{
+        id: string;
+        status: string;
+        origkey: string;
+        sizesjson: string;
+        width: number | null;
+        height: number | null;
+        createdat: string;
+        updatedat: string;
+        rejectionreason: string | null;
+        phash: string | null;
+        duplicateof: string | null;
+        ownerid: string | null;
+      }>;
+    };
     return rows.map(rowToPhoto);
   } catch (error) {
     console.error('Database error in listRecent:', error);
@@ -334,14 +403,14 @@ export async function listMembers(): Promise<
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Query timeout')), 3000)
       ),
-    ])) as any;
-    return (res?.rows || []).map((row: any) => ({
-      id: String(row.id),
-      displayName: String(
-        row.displayname ?? row.displayName ?? row.display_name ?? ''
-      ),
-      role: row.role as 'member' | 'admin',
-    }));
+    ])) as { rows: Array<{ id: string; displayname: string; role: string }> };
+    return (res?.rows || []).map(
+      (row: { id: string; displayname: string; role: string }) => ({
+        id: String(row.id),
+        displayName: String(row.displayname ?? ''),
+        role: row.role as 'member' | 'admin',
+      })
+    );
   } catch (error) {
     console.error('Database error in listMembers:', error);
     // Return empty array instead of crashing
