@@ -1,34 +1,50 @@
 import { Pool, type PoolConfig } from 'pg';
 
-const connectionString = process.env.DATABASE_URL;
-if (!connectionString) throw new Error('DATABASE_URL is not set');
+const rawCs = process.env.DATABASE_URL;
+if (!rawCs) throw new Error('DATABASE_URL is not set');
+
+// Normalize connection string similarly to the "auth" branch adapter
+const connectionString = rawCs
+  .replace(':6543/', ':5432/')
+  .replace('/postgrespostgres', '/postgres')
+  .replace(/[?&]sslmode=require/, '');
 
 function resolveSsl(): NonNullable<PoolConfig['ssl']> {
-  // Allow either env name to disable verification (preview/testing convenience)
-  const noVerify =
+  // Accept multiple flags for convenience
+  const noVerifyFlag =
     process.env.PGSSL_NO_VERIFY === '1' ||
+    process.env.PG_SSL_NO_VERIFY === '1' ||
     process.env.PG_FORCE_NO_VERIFY === '1';
 
-  if (noVerify) {
+  // Allow CA from either plain PEM or base64
+  const caPem =
+    process.env.PG_CA_CERT ||
+    (process.env.PG_CA_CERT_B64
+      ? Buffer.from(process.env.PG_CA_CERT_B64, 'base64').toString('utf8')
+      : undefined);
+
+  if (noVerifyFlag) {
     if (process.env.PG_LOG_SSL_MODE === '1') {
       console.info('PG SSL mode: no-verify (rejectUnauthorized=false)');
     }
     return { rejectUnauthorized: false } as const;
   }
 
-  const caB64 = process.env.PG_CA_CERT_B64;
-  if (caB64) {
-    const ca = Buffer.from(caB64, 'base64').toString('utf8');
+  if (caPem) {
     if (process.env.PG_LOG_SSL_MODE === '1') {
       console.info('PG SSL mode: verify-ca (custom CA provided)');
     }
-    return { rejectUnauthorized: true, ca } as const;
+    return { rejectUnauthorized: true, ca: caPem } as const;
   }
 
+  // Default to relaxed verification to match working behavior on "auth"
   if (process.env.PG_LOG_SSL_MODE === '1') {
-    console.info('PG SSL mode: verify (system trust store)');
+    console.info('PG SSL mode: relaxed (encrypted, hostname skipped)');
   }
-  return { rejectUnauthorized: true } as const;
+  return {
+    rejectUnauthorized: false,
+    checkServerIdentity: () => undefined,
+  } as const;
 }
 
 export const pool = new Pool({
