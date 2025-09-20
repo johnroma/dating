@@ -1,5 +1,5 @@
-// Fetch dev users in a DB-driver-safe way (SQLite first; PG falls back if table not present)
-import { getDb } from '@/src/lib/db';
+// Dev users for /dev/login page (development only)
+// Always returns hardcoded users for fast, reliable dev login
 
 export type DevUser = {
   id: string;
@@ -7,18 +7,14 @@ export type DevUser = {
   role: 'member' | 'admin';
 };
 
-// Default dev users (database-agnostic)
-const DEFAULTS: DevUser[] = [
-  { id: 'member', displayName: 'Member', role: 'member' },
-  { id: 'admin', displayName: 'Admin', role: 'admin' },
+// Hardcoded dev users - always used for /dev/login
+const DEV_USERS: DevUser[] = [
+  { id: 'admin', displayName: 'Admin (Dev)', role: 'admin' },
+  { id: 'member', displayName: 'Member (Dev)', role: 'member' },
 ];
 
 export async function getDevUsers(): Promise<DevUser[]> {
-  try {
-    const db = getDb();
-    const rows = await db.listMembers?.();
-    return Array.isArray(rows) && rows.length ? rows : DEFAULTS;
-  } catch {
-    return DEFAULTS;
-  }
+  // Always return hardcoded users for dev login page
+  // This is faster and more reliable than database queries
+  return DEV_USERS;
 }

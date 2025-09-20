@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import * as React from 'react';
+import React from 'react';
 
 export default function PhotoUploader() {
   const [file, setFile] = React.useState<File | null>(null);

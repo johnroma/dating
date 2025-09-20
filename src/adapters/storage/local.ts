@@ -38,10 +38,16 @@ function variantPath(photoId: string, size: 'sm' | 'md' | 'lg'): string {
 }
 
 async function writeOriginal(key: string, buf: Buffer): Promise<void> {
-  const abs = origPath(key);
-  const dir = path.dirname(abs);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  await fs.promises.writeFile(abs, buf);
+  try {
+    const abs = origPath(key);
+    const dir = path.dirname(abs);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    await fs.promises.writeFile(abs, buf);
+  } catch (error) {
+    throw new Error(
+      `Failed to write original file ${key}: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
 }
 
 async function writeVariant(
@@ -49,10 +55,16 @@ async function writeVariant(
   size: 'sm' | 'md' | 'lg',
   buf: Buffer
 ): Promise<void> {
-  const abs = variantPath(photoId, size);
-  const dir = path.dirname(abs);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  await fs.promises.writeFile(abs, buf);
+  try {
+    const abs = variantPath(photoId, size);
+    const dir = path.dirname(abs);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    await fs.promises.writeFile(abs, buf);
+  } catch (error) {
+    throw new Error(
+      `Failed to write variant ${photoId}/${size}: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
 }
 
 export const storage: StoragePort = {
@@ -84,7 +96,13 @@ export const storage: StoragePort = {
   },
 
   async readOriginalBuffer(origKey: string): Promise<Buffer> {
-    const p = path.join(localOrigRoot(), origKey);
-    return await fs.promises.readFile(p);
+    try {
+      const p = path.join(localOrigRoot(), origKey);
+      return await fs.promises.readFile(p);
+    } catch (error) {
+      throw new Error(
+        `Failed to read original file ${origKey}: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
   },
 };

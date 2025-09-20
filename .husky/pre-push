@@ -3,7 +3,7 @@
 
 echo "🚀 Running pre-push checks..."
 
-# 1. Run all tests
+# 1. Run all tests first (faster feedback)
 echo "🧪 Running tests..."
 pnpm test
 if [ $? -ne 0 ]; then
@@ -11,7 +11,7 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-# 2. Run full build to catch any issues
+# 2. Run production build to catch any issues
 echo "🏗️  Running production build..."
 pnpm build
 if [ $? -ne 0 ]; then

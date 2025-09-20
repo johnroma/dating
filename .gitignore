@@ -32,3 +32,11 @@ pnpm-debug.log*
 *.db-shm
 *.db-wal
 *.db-journal
+
+# SSL certificates
+*.pem
+*.crt
+*.key
+*.p12
+*.pfx
+supabase-ca.pem

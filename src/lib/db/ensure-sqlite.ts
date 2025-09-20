@@ -79,6 +79,18 @@ export function ensureSqliteSchema(db: Database.Database) {
   `
   ).run();
 
+  // Composite indexes for list queries performance
+  db.prepare(
+    `
+    CREATE INDEX IF NOT EXISTS idx_photo_status_deleted_created ON photo (status, deletedat, createdat DESC)
+  `
+  ).run();
+  db.prepare(
+    `
+    CREATE INDEX IF NOT EXISTS idx_photo_deleted_created ON photo (deletedat, createdat DESC)
+  `
+  ).run();
+
   // If the Photo table exists without a default for status, enforce "APPROVED" at insert via trigger.
   // (We do NOT introduce a "PENDING" stage now; keeping that as a capability only.)
   db.prepare(

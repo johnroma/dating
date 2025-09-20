@@ -1,0 +1,28 @@
+// Clear Supabase environment variables before any modules are loaded
+// This prevents network calls during SQLite tests
+delete process.env.SUPABASE_URL;
+delete process.env.SUPABASE_ANON_KEY;
+delete process.env.SUPABASE_PROJECT_REF;
+delete process.env.SUPABASE_JWKS_URL;
+delete process.env.SUPABASE_ADMIN_EMAILS;
+
+// Test environment setup
+process.env.NODE_ENV = 'test';
+
+// For tests that need SQLite
+if (!process.env.TEST_DB_DRIVER || process.env.TEST_DB_DRIVER === 'sqlite') {
+  process.env.DB_DRIVER = 'sqlite';
+  process.env.DATABASE_FILE = '.data/db/test-sqlite.db';
+}
+
+// For tests that need PostgreSQL, use a test database URL
+if (process.env.TEST_DB_DRIVER === 'postgres') {
+  process.env.DB_DRIVER = 'postgres';
+  // Use a test-specific database URL or skip if not available
+  if (!process.env.TEST_DATABASE_URL) {
+    console.log('⚠️  TEST_DATABASE_URL not set, skipping PostgreSQL tests');
+    process.env.SKIP_POSTGRES_TESTS = 'true';
+  } else {
+    process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
+  }
+}

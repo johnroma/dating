@@ -2,67 +2,54 @@ import { Pool } from 'pg';
 
 import { ensurePostgresSchema } from '../ensure-postgres';
 import type { DbPort } from '../port';
+import { getPgPool } from '../postgres';
 import type { Photo, PhotoStatus } from '../types';
 
-// Build connection string and SSL options from env
-const urlRaw = process.env.DATABASE_URL || '';
-const connectionString = urlRaw
-  ? urlRaw.replace(':6543/', ':5432/').replace('/postgrespostgres', '/postgres')
-  : urlRaw;
+let pool: Pool | null = null;
+let isHealthy = true;
+const lastHealthCheck = Date.now();
 
-// Remove sslmode=require from connection string as it forces strict validation
-// We'll handle SSL configuration through the ssl object instead
-let finalConnectionString =
-  connectionString?.replace(/[?&]sslmode=require/, '') || connectionString;
+export function getPool(): Pool {
+  if (!pool) {
+    console.log('Creating database connection pool...');
+    pool = getPgPool();
 
-// Force strict SSL validation for testing
-if (process.env.FORCE_STRICT_SSL) {
-  finalConnectionString =
-    finalConnectionString?.replace(/sslmode=require/, 'sslmode=verify-full') ||
-    '';
-  // Also try to force an SSL error by using invalid hostname
-  finalConnectionString =
-    finalConnectionString?.replace(/@[^:]+:/, '@invalid-ssl-host:') || '';
+    pool.on('error', err => {
+      console.error('Pool error:', err.message);
+      isHealthy = false;
+    });
+
+    pool.on('connect', () => {
+      console.log('New client connected to database');
+      isHealthy = true;
+    });
+  }
+  return pool;
 }
 
-// Optional strict TLS: provide CA via env (multi-line PEM or base64)
-const ca =
-  process.env.PG_CA_CERT ||
-  (process.env.PG_CA_CERT_B64
-    ? Buffer.from(process.env.PG_CA_CERT_B64, 'base64').toString('utf8')
-    : undefined);
+// const HEALTH_CHECK_INTERVAL = 30000; // 30 seconds
 
-// Pragmatic TLS: encrypt without CA verification (libpq sslmode=require style)
-// Accept both env spellings: PGSSL_NO_VERIFY and PG_SSL_NO_VERIFY
-const noVerify =
-  process.env.PGSSL_NO_VERIFY === '1' ||
-  process.env.PG_SSL_NO_VERIFY === '1' ||
-  /\bsslmode=(?:require|allow|prefer|no-verify)\b/i.test(
-    finalConnectionString || ''
-  );
+// Graceful shutdown handling
+let isShuttingDown = false;
 
-const ssl = ca
-  ? { ca, rejectUnauthorized: true }
-  : noVerify
-    ? { rejectUnauthorized: false }
-    : process.env.FORCE_STRICT_SSL
-      ? { rejectUnauthorized: true } // Force strict SSL for testing
-      : {
-          rejectUnauthorized: false,
-          checkServerIdentity: () => undefined, // Skip hostname verification
-        }; // Always use relaxed SSL validation for Supabase
-
-const pool = new Pool({
-  connectionString: finalConnectionString,
-  max: 10, // Maximum number of clients in the pool
-  idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-  connectionTimeoutMillis: 10000, // Return an error after 10 seconds if connection could not be established
-  ssl,
+process.on('SIGINT', async () => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log('Shutting down database pool...');
+  if (pool) {
+    await pool.end();
+  }
+  process.exit(0);
 });
 
-// Handle pool errors
-pool.on('error', () => {
-  // Silent error handling for production
+process.on('SIGTERM', async () => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log('Shutting down database pool...');
+  if (pool) {
+    await pool.end();
+  }
+  process.exit(0);
 });
 
 // Initialize schema on first connection
@@ -107,8 +94,12 @@ function rowToPhoto(row: Record<string, unknown>): Photo {
   };
 }
 
-export const insertPhoto: DbPort['insertPhoto'] = async p => {
+export const insertPhoto: DbPort['insertPhoto'] = async (
+  p,
+  _userEmail?: string
+) => {
   await ensureSchema();
+  const pool = getPool();
   await pool.query(
     'INSERT INTO photo (id, status, origkey, sizesjson, width, height, createdat, updatedat, rejectionreason, phash, duplicateof, ownerid) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',
     [
@@ -136,6 +127,7 @@ export const updatePhotoSizes: DbPort['updatePhotoSizes'] = async (
   height
 ) => {
   // Schema already exists
+  const pool = getPool();
   await pool.query(
     'UPDATE photo SET sizesjson = $1, width = $2, height = $3, updatedat = $4 WHERE id = $5',
     [
@@ -151,6 +143,7 @@ export const updatePhotoSizes: DbPort['updatePhotoSizes'] = async (
 export const setStatus: DbPort['setStatus'] = async (id, status, extras) => {
   // Schema already eDxists
   const now = new Date();
+  const pool = getPool();
   await pool.query(
     'UPDATE photo SET status = $1, rejectionreason = COALESCE($2, rejectionreason), updatedat = $3 WHERE id = $4',
     [status, extras?.rejectionreason ?? null, now.toISOString(), id]
@@ -165,6 +158,7 @@ export async function updatePhotoStatus(
 ) {
   await ensureSchema();
   const now = new Date();
+  const pool = getPool();
   await pool.query(
     'UPDATE photo SET status = $1, rejectionreason = $2, updatedat = $3 WHERE id = $4',
     [status, reason, now.toISOString(), id]
@@ -173,6 +167,7 @@ export async function updatePhotoStatus(
 
 export const deletePhoto: DbPort['deletePhoto'] = async id => {
   // Schema already exists
+  const pool = getPool();
   await pool.query('DELETE FROM photo WHERE id = $1', [id]);
 };
 
@@ -180,6 +175,7 @@ export const softDeletePhoto: NonNullable<
   DbPort['softDeletePhoto']
 > = async id => {
   // Schema already exists
+  const pool = getPool();
   await pool.query(
     'UPDATE photo SET deletedat = now(), updatedat = now() WHERE id = $1',
     [id]
@@ -188,6 +184,7 @@ export const softDeletePhoto: NonNullable<
 
 export const restorePhoto: NonNullable<DbPort['restorePhoto']> = async id => {
   // Schema already exists
+  const pool = getPool();
   await pool.query(
     'UPDATE photo SET deletedat = NULL, updatedat = now() WHERE id = $1',
     [id]
@@ -195,145 +192,194 @@ export const restorePhoto: NonNullable<DbPort['restorePhoto']> = async id => {
 };
 
 export const getPhoto: DbPort['getPhoto'] = async id => {
-  await ensureSchema();
-  const { rows } = await pool.query('SELECT * FROM photo WHERE id = $1', [id]);
-  if (!rows[0]) return undefined;
-  return rowToPhoto(rows[0]);
+  try {
+    await ensureSchema();
+    const pool = getPool();
+    const queryPromise = pool.query('SELECT * FROM photo WHERE id = $1', [id]);
+
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Query timeout')), 3000);
+    });
+
+    const result = (await Promise.race([queryPromise, timeoutPromise])) as {
+      rows: Record<string, unknown>[];
+    };
+
+    if (!result.rows.length) return undefined;
+    return rowToPhoto(result.rows[0]);
+  } catch (error) {
+    console.error('Failed to fetch photo:', { id, error });
+    throw error;
+  }
 };
 
-export const getByOrigKey: DbPort['getByOrigKey'] = async origkey => {
-  // Schema already exists
-  const { rows } = await pool.query(
-    'SELECT * FROM photo WHERE origkey = $1 LIMIT 1',
-    [origkey]
-  );
-  if (!rows[0]) return undefined;
-  return rowToPhoto(rows[0]);
+export const getByOrigKey: DbPort['getByOrigKey'] = async origKey => {
+  const pool = getPool();
+  const result = await pool.query('SELECT * FROM photo WHERE origkey = $1', [
+    origKey,
+  ]);
+  if (!result.rows.length) return undefined;
+  return rowToPhoto(result.rows[0]);
 };
 
-export const listApproved: DbPort['listApproved'] = async (
-  limit = 50,
-  offset = 0
-) => {
-  await ensureSchema();
-  const { rows } = await pool.query(
+export const listApproved: DbPort['listApproved'] = async (limit, offset) => {
+  const pool = getPool();
+  const result = await pool.query(
     'SELECT * FROM photo WHERE status = $1 AND deletedat IS NULL ORDER BY createdat DESC LIMIT $2 OFFSET $3',
     ['APPROVED', limit, offset]
   );
-  return rows.map(rowToPhoto);
+  return result.rows.map(rowToPhoto);
 };
 
-export const listPending: DbPort['listPending'] = async (
-  limit = 50,
-  offset = 0
-) => {
-  // Schema already exists
-  const { rows } = await pool.query(
-    'SELECT * FROM photo WHERE status = $1 ORDER BY createdat DESC LIMIT $2 OFFSET $3',
+export const listPending: DbPort['listPending'] = async (limit, offset) => {
+  const pool = getPool();
+  const result = await pool.query(
+    'SELECT * FROM photo WHERE status = $1 AND deletedat IS NULL ORDER BY createdat ASC LIMIT $2 OFFSET $3',
     ['PENDING', limit, offset]
   );
-  return rows.map(rowToPhoto);
-};
-
-export const listRecent: DbPort['listRecent'] = async (
-  limit = 200,
-  offset = 0
-) => {
-  await ensureSchema();
-  const { rows } = await pool.query(
-    'SELECT * FROM photo WHERE deletedat IS NULL ORDER BY createdat DESC LIMIT $1 OFFSET $2',
-    [limit, offset]
-  );
-  return rows.map(rowToPhoto);
+  return result.rows.map(rowToPhoto);
 };
 
 export const countApproved: DbPort['countApproved'] = async () => {
-  // Schema already exists
-  const { rows } = await pool.query(
-    'SELECT COUNT(*)::int as c FROM photo WHERE status = $1',
+  const pool = getPool();
+  const result = await pool.query(
+    'SELECT COUNT(*)::int FROM photo WHERE status = $1 AND deletedat IS NULL',
     ['APPROVED']
   );
-  return Number(rows[0]?.c ?? 0);
+  return result.rows[0]['count'] as number;
 };
 
-// Step 7 helpers (not in DbPort on purpose; import directly where needed)
-export async function upsertIngestKey(
-  id: string,
-  photoid: string
-): Promise<'created' | 'exists'> {
-  // Schema already exists
-  const r = await pool.query(
-    'INSERT INTO ingestkeys(id, photoid, createdat) VALUES($1,$2, now()) ON CONFLICT(id) DO NOTHING RETURNING photoid',
-    [id, photoid]
-  );
-  return r.rowCount === 0 ? 'exists' : 'created';
-}
-
-export async function insertAudit(a: {
-  id: string;
-  photoid: string;
-  action: string;
-  actor: string;
-  reason?: string | null;
-  at: string;
-}) {
-  // Schema already exists
-  await pool.query(
-    'INSERT INTO auditlog(id, photoid, action, actor, reason, at) VALUES ($1,$2,$3,$4,$5,$6)',
-    [a.id, a.photoid, a.action, a.actor, a.reason ?? null, a.at]
-  );
-}
-
-// Dev-only helper for /dev/login. Safe even if the Member table isn't present yet.
-export async function listMembers(): Promise<
-  {
-    id: string;
-    displayName: string;
-    role: 'member' | 'admin';
-  }[]
-> {
-  try {
-    const res = await pool.query(
-      'SELECT id, displayname, role FROM account WHERE deletedat IS NULL ORDER BY role DESC, displayname ASC'
-    );
-    return (res?.rows || []).map(row => ({
-      id: String(row.id),
-      displayName: String(
-        row.displayname ?? row.displayName ?? row.display_name ?? ''
-      ),
-      role: row.role as 'member' | 'admin',
-    }));
-  } catch {
-    return [];
-  }
-}
-
-// Owner-scoped listing
-export async function listPhotosByOwner(ownerId: string): Promise<Photo[]> {
-  await ensureSchema();
-  const { rows } = await pool.query(
-    'SELECT * FROM photo WHERE ownerid = $1 AND deletedat IS NULL ORDER BY createdat DESC',
-    [ownerId]
-  );
-  return rows.map(rowToPhoto);
-}
-
-// Graceful shutdown
-process.on('SIGINT', async () => {
-  await pool.end();
-  process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-  await pool.end();
-  process.exit(0);
-});
-
 export const countPending: DbPort['countPending'] = async () => {
-  // Schema already exists
-  const { rows } = await pool.query(
-    'SELECT COUNT(*)::int as c FROM photo WHERE status = $1',
+  const pool = getPool();
+  const result = await pool.query(
+    'SELECT COUNT(*)::int FROM photo WHERE status = $1 AND deletedat IS NULL',
     ['PENDING']
   );
-  return Number(rows[0]?.c ?? 0);
+  return result.rows[0]['count'] as number;
+};
+
+export const listRejected: DbPort['listRejected'] = async (limit, offset) => {
+  const pool = getPool();
+  const result = await pool.query(
+    'SELECT * FROM photo WHERE status = $1 AND deletedat IS NULL ORDER BY createdat DESC LIMIT $2 OFFSET $3',
+    ['REJECTED', limit, offset]
+  );
+  return result.rows.map(rowToPhoto);
+};
+
+export const listDeleted: DbPort['listDeleted'] = async (limit, offset) => {
+  const pool = getPool();
+  const result = await pool.query(
+    'SELECT * FROM photo WHERE deletedat IS NOT NULL ORDER BY deletedat DESC LIMIT $1 OFFSET $2',
+    [limit, offset]
+  );
+  return result.rows.map(rowToPhoto);
+};
+
+export const getConnectionMetrics = () => {
+  const pool = getPool();
+  return {
+    totalCount: pool.totalCount,
+    idleCount: pool.idleCount,
+    waitingCount: pool.waitingCount,
+    isHealthy,
+    lastHealthCheck: new Date(lastHealthCheck).toISOString(),
+    uptime: Date.now() - lastHealthCheck,
+  };
+};
+
+export const listByStatus: DbPort['listByStatus'] = async (
+  status,
+  limit,
+  offset
+) => {
+  const pool = getPool();
+  const result = await pool.query(
+    'SELECT * FROM photo WHERE status = $1 ORDER BY createdat DESC LIMIT $2 OFFSET $3',
+    [status, limit, offset]
+  );
+  return result.rows.map(rowToPhoto);
+};
+
+export const getPhotosByIds: DbPort['getPhotosByIds'] = async ids => {
+  const pool = getPool();
+  const result = await pool.query(
+    'SELECT * FROM photo WHERE id = ANY($1::text[]) ORDER BY createdat DESC',
+    [ids]
+  );
+  return result.rows.map(rowToPhoto);
+};
+
+export const bulkSetStatus: DbPort['bulkSetStatus'] = async (
+  ids,
+  status,
+  extras
+) => {
+  const pool = getPool();
+  await pool.query(
+    'UPDATE photo SET status = $1, rejectionreason = COALESCE($2, rejectionreason), updatedat = NOW() WHERE id = ANY($3::text[])',
+    [status, extras?.rejectionreason ?? null, ids]
+  );
+};
+
+export const upsertIngestKey: DbPort['upsertIngestKey'] = async (
+  id,
+  photoId
+) => {
+  const pool = getPool();
+  const result = await pool.query(
+    'INSERT INTO ingestkeys (id, photoid, createdat) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET photoid = $2, createdat = $3 RETURNING photoid',
+    [id, photoId, new Date().toISOString()]
+  );
+  return result.rowCount === 0 ? 'exists' : 'created';
+};
+
+export const getIngestKey: DbPort['getIngestKey'] = async id => {
+  const pool = getPool();
+  const result = await pool.query('SELECT * FROM ingestkeys WHERE id = $1', [
+    id,
+  ]);
+  if (!result.rows.length) return undefined;
+  return result.rows[0] as { id: string; photoid: string; createdat: string };
+};
+
+export const deleteIngestKey: DbPort['deleteIngestKey'] = async id => {
+  const pool = getPool();
+  await pool.query('DELETE FROM ingestkeys WHERE id = $1', [id]);
+};
+
+export const listAuditLog: DbPort['listAuditLog'] = async photoId => {
+  const pool = getPool();
+  const result = await pool.query(
+    'SELECT * FROM auditlog WHERE photoid = $1 ORDER BY at DESC',
+    [photoId]
+  );
+  return result.rows as Array<{
+    id: string;
+    photoid: string;
+    action: string;
+    actor: string;
+    reason: string | null;
+    at: string;
+  }>;
+};
+
+export const addAuditLogEntry: DbPort['addAuditLogEntry'] = async (
+  photoId,
+  action,
+  actor,
+  reason
+) => {
+  const pool = getPool();
+  await pool.query(
+    'INSERT INTO auditlog (id, photoid, action, actor, reason, at) VALUES ($1, $2, $3, $4, $5, $6)',
+    [
+      `${photoId}-${Date.now()}`,
+      photoId,
+      action,
+      actor,
+      reason,
+      new Date().toISOString(),
+    ]
+  );
 };

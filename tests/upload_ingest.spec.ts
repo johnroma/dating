@@ -63,6 +63,7 @@ it('upload then ingest creates files and DB row', async () => {
     })
   );
   const igJson = await igRes.json();
+  expect(igRes.status).toBe(200);
   expect(igJson.id).toBeTruthy();
 
   // Check DB row via getDb()
