@@ -1,33 +1,100 @@
 export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
+import { Client } from 'pg';
 
-import { computePgSsl } from '@/src/lib/db/pg-ssl';
-import { getPgPool } from '@/src/lib/db/postgres';
+type ConnectionConfig = {
+  host?: string;
+  hostname?: string;
+  port?: string;
+  user?: string;
+  password?: string;
+  database?: string;
+};
+
+function parseConnectionString(connectionString: string): ConnectionConfig {
+  const url = new URL(connectionString);
+  return {
+    host: url.hostname,
+    port: url.port,
+    user: url.username,
+    password: url.password,
+    database: url.pathname.slice(1), // Remove leading slash
+  };
+}
+
+function sslConfig() {
+  const forceNoVerify = process.env.PG_FORCE_NO_VERIFY === '1';
+  const caB64 = process.env.PG_CA_CERT_B64 || '';
+
+  if (forceNoVerify) {
+    return {
+      mode: 'forced-no-verify' as const,
+      ssl: { rejectUnauthorized: false } as const,
+      meta: { rejectUnauthorized: false, ca: false },
+    };
+  }
+
+  if (caB64) {
+    const ca = Buffer.from(caB64, 'base64').toString('utf8');
+    return {
+      mode: 'verify-ca' as const,
+      ssl: { ca, rejectUnauthorized: true } as const,
+      meta: { rejectUnauthorized: true, ca: true },
+    };
+  }
+
+  // Minimal fallback: encrypted but default trust store
+  return {
+    mode: 'require-no-custom-ca' as const,
+    ssl: true as const,
+    meta: { rejectUnauthorized: true, ca: false },
+  };
+}
 
 export async function GET() {
-  const { ssl, mode } = computePgSsl(process.env.DATABASE_URL);
+  const cs = process.env.DATABASE_URL || '';
+  if (!cs) {
+    return NextResponse.json(
+      { error: 'Missing DATABASE_URL' },
+      { status: 500 }
+    );
+  }
+
+  // Build a fresh client – do NOT reuse any app-level Pool here.
+  const conn = parseConnectionString(cs);
+  const { mode, ssl, meta } = sslConfig();
+
+  const client = new Client({
+    host: conn.host || conn.hostname,
+    port: conn.port ? Number(conn.port) : 5432,
+    user: conn.user,
+    password: conn.password,
+    database: conn.database,
+    ssl,
+  });
+
   let ok = false;
-  let error: string | null = null;
+  let err: string | null = null;
+
   try {
-    const r = await getPgPool().query('select 1 as ok');
+    await client.connect();
+    const r = await client.query('select 1 as ok');
     ok = r.rows?.[0]?.ok === 1;
   } catch (e: unknown) {
-    error = e instanceof Error ? e.message : String(e);
+    err = e instanceof Error ? e.message : String(e);
+  } finally {
+    try {
+      await client.end();
+    } catch {
+      /* ignore */
+    }
   }
-  const sslView =
-    ssl === false
-      ? false
-      : {
-          rejectUnauthorized:
-            (ssl as { rejectUnauthorized?: boolean })?.rejectUnauthorized !==
-            false,
-          ca: !!(ssl as { ca?: string })?.ca,
-        };
 
-  return NextResponse.json(
-    { mode, ssl: sslView, testQueryOk: ok, error },
-    { status: ok ? 200 : 500 }
-  );
+  return NextResponse.json({
+    mode,
+    ssl: meta,
+    testQueryOk: ok,
+    ...(err ? { error: err } : {}),
+  });
 }
