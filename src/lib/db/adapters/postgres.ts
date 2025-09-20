@@ -9,13 +9,18 @@ const urlRaw = process.env.DATABASE_URL || '';
 // Fix the connection string - remove duplicate database segment and normalize query params
 let finalConnectionString = urlRaw.replace('/postgrespostgres', '/postgres');
 
+// Check for Vercel environment using proper Vercel env vars
+const isVercel = process.env.VERCEL === '1';
+const isVercelProduction = isVercel && process.env.VERCEL_ENV === 'production';
+const isProduction =
+  process.env.NODE_ENV === 'production' || isVercelProduction;
+
 try {
   const parsed = new URL(finalConnectionString);
   const params = parsed.searchParams;
 
-  // For Vercel production, we need to handle SSL mode properly
-  if (process.env.NODE_ENV === 'production') {
-    // In production, use require mode for Supabase
+  if (isProduction) {
+    // In production/Vercel, use require mode for Supabase
     params.set('sslmode', 'require');
   } else {
     // In development, remove sslmode to use our SSL config
@@ -34,12 +39,11 @@ try {
 }
 
 // SSL configuration for Supabase
-// In production, we rely on sslmode=require in the connection string
+// In production/Vercel, we rely on sslmode=require in the connection string
 // In development, we use our own SSL config
-const ssl =
-  process.env.NODE_ENV === 'production'
-    ? undefined // Let sslmode=require handle SSL in production
-    : { rejectUnauthorized: false }; // Development uses relaxed SSL
+const ssl = isProduction
+  ? undefined // Let sslmode=require handle SSL in production/Vercel
+  : { rejectUnauthorized: false }; // Development uses relaxed SSL
 
 // Simple connection pool - no pre-warming, just basic pooling
 let pool: Pool | null = null;
