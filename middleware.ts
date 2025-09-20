@@ -87,6 +87,28 @@ function parseSessionCookie(
 }
 
 export function middleware(req: NextRequest) {
+  // Diagnostic: log OPTIONS requests that may be causing 400s on Vercel
+  if (req.method === 'OPTIONS') {
+    try {
+      const id =
+        req.headers.get('x-vercel-id') || req.headers.get('x-request-id');
+      const acrm = req.headers.get('access-control-request-method');
+      const acrh = req.headers.get('access-control-request-headers');
+      const origin = req.headers.get('origin');
+      const host = req.headers.get('host');
+      // eslint-disable-next-line no-console
+      console.warn('Preflight OPTIONS observed', {
+        path: req.nextUrl.pathname,
+        host,
+        origin,
+        acrm,
+        acrh,
+        requestId: id || undefined,
+      });
+    } catch {
+      // ignore logging errors
+    }
+  }
   const { pathname } = req.nextUrl;
   const sess = parseSessionCookie(req);
 

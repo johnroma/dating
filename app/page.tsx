@@ -4,6 +4,7 @@ export const fetchCache = 'force-no-store';
 export const runtime = 'nodejs';
 
 import { unstable_noStore as noStore } from 'next/cache';
+import { headers } from 'next/headers';
 import Image from 'next/image';
 import Link from 'next/link';
 import React, { Suspense } from 'react';
@@ -59,7 +60,39 @@ async function Gallery() {
         })}
       </div>
     );
-  } catch {
+  } catch (error) {
+    try {
+      const h = await headers();
+      const reqId =
+        h.get('x-vercel-id') || h.get('x-request-id') || h.get('traceparent');
+      const host = h.get('x-forwarded-host') || h.get('host');
+      const origin = h.get('origin');
+      // eslint-disable-next-line no-console
+      console.error('Gallery load failed', {
+        at: 'app/page.tsx:Gallery',
+        requestId: reqId,
+        method: 'GET',
+        path: '/',
+        host,
+        origin,
+        dbDriver: process.env.DB_DRIVER || 'sqlite',
+        databaseUrlSet: Boolean(process.env.DATABASE_URL),
+        vercel: Boolean(process.env.VERCEL),
+        nodeEnv: process.env.NODE_ENV,
+        storageDriver: process.env.STORAGE_DRIVER || 'local',
+        cdnPublicBase: process.env.NEXT_PUBLIC_CDN_BASE_URL || undefined,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+    } catch (e) {
+      // If header extraction or structured logging fails, still emit a minimal error
+      // eslint-disable-next-line no-console
+      console.error('Gallery load failed (minimal)', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        logError: e instanceof Error ? e.message : undefined,
+      });
+    }
     return (
       <div className='col-span-full rounded border bg-red-50 p-4 text-sm text-red-700'>
         Unable to load photos. Please try again later.

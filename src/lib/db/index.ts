@@ -49,6 +49,11 @@ function load(): Promise<AdapterModule> {
     const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
     cached = (async () => {
       try {
+        console.info('DB adapter selection', {
+          driver,
+          databaseUrlSet: Boolean(process.env.DATABASE_URL),
+          vercel: Boolean(process.env.VERCEL),
+        });
         if (driver === 'postgres') {
           return await import('./adapters/postgres');
         }
