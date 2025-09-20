@@ -61,19 +61,30 @@ function decode(token: string | undefined | null): Session | null {
 }
 
 export async function getSession(): Promise<Session | null> {
-  // Always check both dev and Supabase sessions for consistency with middleware
-  const devSession = await readDevSess();
-  if (devSession) return devSession;
+  if (process.env.NODE_ENV === 'test') {
+    return readDevSess();
+  }
 
-  // Temporarily disabled Supabase session reading for tests
-  // TODO: Re-enable after fixing test issues
+  const [supabaseSession, devSession] = await Promise.all([
+    readSupabaseSess(),
+    readDevSess(),
+  ]);
 
-  return null;
+  return supabaseSession ?? devSession;
 }
 
 async function readDevSess(): Promise<Session | null> {
   const store = await cookies();
   return decode(store.get(SESS_NAME)?.value);
+}
+
+async function readSupabaseSess(): Promise<Session | null> {
+  try {
+    const { readSupabaseSession } = await import('@/src/lib/auth/supabase-jwt');
+    return await readSupabaseSession();
+  } catch {
+    return null;
+  }
 }
 
 export async function setSession(sess: Session) {

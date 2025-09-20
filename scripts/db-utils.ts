@@ -22,43 +22,22 @@
  */
 
 import { config } from 'dotenv';
-import { Pool, PoolClient } from 'pg';
+import { PoolClient } from 'pg';
+
+import { dbPool } from './shared-db-config';
 
 // Load environment variables
 config({ path: '.env.local' });
-
-// Use the same connection string logic as the app's Postgres adapter
-const urlRaw = process.env.DATABASE_URL || '';
-const connectionString = urlRaw
-  ? urlRaw.replace(':6543/', ':5432/').replace('/postgrespostgres', '/postgres')
-  : urlRaw;
-
-// Remove sslmode=require from connection string as it forces strict validation
-const finalConnectionString =
-  connectionString?.replace(/[?&]sslmode=require/, '') || connectionString;
-
-if (!connectionString) {
-  throw new Error('❌ Missing DATABASE_URL in environment variables');
-}
-
-// Create a reliable connection pool
-const pool = new Pool({
-  connectionString: finalConnectionString,
-  ssl: { rejectUnauthorized: false },
-  connectionTimeoutMillis: 15000,
-  idleTimeoutMillis: 30000,
-  max: 1, // Use only 1 connection for scripts
-});
 
 /**
  * Get a database client from the pool
  * Remember to call client.release() and pool.end() when done!
  */
 export async function getDbClient(): Promise<PoolClient> {
-  console.log("🔧 Using app's connection string logic");
-  console.log('📊 DATABASE_URL:', connectionString ? 'Set' : 'Not set');
+  console.log('🔧 Using shared database configuration');
+  console.log('📊 DATABASE_URL:', process.env.DATABASE_URL ? 'Set' : 'Not set');
 
-  const client = await pool.connect();
+  const client = await dbPool.connect();
   console.log('✅ Connected to Supabase successfully!');
   return client;
 }
@@ -256,7 +235,7 @@ export async function testConnection() {
 }
 
 // Export the pool for advanced usage
-export { pool };
+export { dbPool as pool };
 
 // Example usage (uncomment to test):
 /*

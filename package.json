@@ -25,6 +25,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.676.0",
     "@aws-sdk/s3-request-presigner": "^3.888.0",
+    "@supabase/supabase-js": "^2.57.4",
     "dating": "link:",
     "dotenv": "^17.2.2",
     "jose": "^5.2.4",

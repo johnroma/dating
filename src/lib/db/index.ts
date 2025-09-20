@@ -13,7 +13,9 @@ function load(): Promise<AdapterModule> {
     const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
     cached = (async () => {
       try {
-        if (driver === 'postgres') return await import('./adapters/postgres');
+        if (driver === 'postgres') {
+          return await import('./adapters/postgres');
+        }
         return await import('./adapters/sqlite');
       } catch (err: unknown) {
         if (driver !== 'postgres') {

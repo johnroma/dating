@@ -1,37 +1,51 @@
 // Ensures Postgres/Supabase has all required tables, columns, and indexes.
 // Safe to run multiple times. Only runs when DB_DRIVER=postgres.
-import { Pool } from 'pg';
+// import { Pool } from 'pg';
 
 // Build connection string and SSL options from env (same as postgres.ts)
-const urlRaw = process.env.DATABASE_URL || '';
-const connectionString = urlRaw
-  ? urlRaw.replace(':6543/', ':5432/').replace('/postgrespostgres', '/postgres')
-  : urlRaw;
+// const urlRaw = process.env.DATABASE_URL || '';
+// const connectionString = urlRaw
+//   ? urlRaw.replace(':6543/', ':5432/').replace('/postgrespostgres', '/postgres')
+//   : urlRaw;
 
-const finalConnectionString =
-  connectionString?.replace(/[?&]sslmode=require/, '') || connectionString;
+// const finalConnectionString =
+//   connectionString?.replace(/[?&]sslmode=require/, '') || connectionString;
 
 // Simple SSL configuration for Supabase (same as postgres.ts)
-const ssl = {
-  rejectUnauthorized: false, // Allow self-signed certificates
-  checkServerIdentity: () => undefined, // Skip hostname verification
-};
+// const ssl = {
+//   rejectUnauthorized: false, // Allow self-signed certificates
+//   checkServerIdentity: () => undefined, // Skip hostname verification
+// };
 
-const pool = new Pool({
-  connectionString: finalConnectionString,
-  ssl,
-});
+// Import the shared pool from the main adapter
+import { getPool } from './adapters/postgres';
 
 let schemaEnsured = false;
+let schemaPromise: Promise<void> | null = null;
 
 export async function ensurePostgresSchema() {
   if (schemaEnsured) return;
 
-  const client = await pool.connect();
+  // If schema is already being ensured, wait for it
+  if (schemaPromise) {
+    await schemaPromise;
+    return;
+  }
 
-  try {
-    // Create Member table
-    await client.query(`
+  // Create the schema promise
+  schemaPromise = (async () => {
+    let client;
+    try {
+      const pool = getPool();
+      client = await pool.connect();
+    } catch (error) {
+      console.error('Failed to get database connection:', error);
+      throw error;
+    }
+
+    try {
+      // Create Member table
+      await client.query(`
       CREATE TABLE IF NOT EXISTS account (
         id text PRIMARY KEY,
         email text,
@@ -42,8 +56,8 @@ export async function ensurePostgresSchema() {
       )
     `);
 
-    // Create Photo table
-    await client.query(`
+      // Create Photo table
+      await client.query(`
       CREATE TABLE IF NOT EXISTS photo (
         id text PRIMARY KEY,
         status text NOT NULL,
@@ -61,25 +75,25 @@ export async function ensurePostgresSchema() {
       )
     `);
 
-    // Add photo columns if missing (for existing tables)
-    await client.query(`
+      // Add photo columns if missing (for existing tables)
+      await client.query(`
       ALTER TABLE photo ADD COLUMN IF NOT EXISTS ownerid text REFERENCES account(id) ON DELETE SET NULL
     `);
 
-    await client.query(`
+      await client.query(`
       ALTER TABLE photo ADD COLUMN IF NOT EXISTS deletedat timestamptz
     `);
 
-    await client.query(`
+      await client.query(`
       ALTER TABLE photo ADD COLUMN IF NOT EXISTS rejectionreason text
     `);
 
-    await client.query(`
+      await client.query(`
       ALTER TABLE photo ADD COLUMN IF NOT EXISTS updatedat timestamptz
     `);
 
-    // Create IngestKeys table
-    await client.query(`
+      // Create IngestKeys table
+      await client.query(`
       CREATE TABLE IF NOT EXISTS ingestkeys (
         id text PRIMARY KEY,
         photoid text NOT NULL,
@@ -87,8 +101,8 @@ export async function ensurePostgresSchema() {
       )
     `);
 
-    // Create AuditLog table
-    await client.query(`
+      // Create AuditLog table
+      await client.query(`
       CREATE TABLE IF NOT EXISTS auditlog (
         id text PRIMARY KEY,
         photoid text NOT NULL,
@@ -99,48 +113,63 @@ export async function ensurePostgresSchema() {
       )
     `);
 
-    // Create indexes for performance
-    await client.query(`
+      // Create indexes for performance
+      await client.query(`
       CREATE INDEX IF NOT EXISTS photo_createdat_idx ON photo(createdat DESC)
     `);
 
-    await client.query(`
+      await client.query(`
       CREATE INDEX IF NOT EXISTS photo_status_idx ON photo(status)
     `);
 
-    await client.query(`
+      await client.query(`
       CREATE INDEX IF NOT EXISTS photo_ownerid_idx ON photo(ownerid)
     `);
 
-    await client.query(`
+      await client.query(`
       CREATE INDEX IF NOT EXISTS photo_deletedat_idx ON photo(deletedat)
     `);
 
-    await client.query(`
+      await client.query(`
       CREATE INDEX IF NOT EXISTS photo_status_created_idx ON photo(status, createdat DESC)
     `);
 
-    await client.query(`
+      await client.query(`
       CREATE INDEX IF NOT EXISTS photo_owner_created_idx ON photo(ownerid, createdat DESC)
     `);
 
-    // Create unique index for ingest keys
-    await client.query(`
+      // Create composite indexes for list queries performance
+      await client.query(`
+      CREATE INDEX IF NOT EXISTS photo_status_deleted_created_idx ON photo(status, deletedat, createdat DESC)
+    `);
+
+      await client.query(`
+      CREATE INDEX IF NOT EXISTS photo_deleted_created_idx ON photo(deletedat, createdat DESC)
+    `);
+
+      // Create unique index for ingest keys
+      await client.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS ingest_key_id_uq ON ingestkeys(id)
     `);
 
-    // Seed two dev members for local work
-    await client.query(`
+      // Seed two dev members for local work
+      await client.query(`
       INSERT INTO account (id, email, displayname, role)
       VALUES
         ('member', NULL, 'Member', 'member'),
         ('admin', NULL, 'Admin', 'admin')
       ON CONFLICT (id) DO NOTHING
     `);
-  } finally {
-    client.release();
-    schemaEnsured = true;
-  }
+    } finally {
+      if (client) {
+        client.release();
+      }
+      schemaEnsured = true;
+    }
+  })();
+
+  // Wait for the schema creation to complete
+  await schemaPromise;
 }
 
 export async function ensurePostgres() {
@@ -152,10 +181,16 @@ export async function ensurePostgres() {
 }
 
 // Graceful shutdown
-process.on('SIGINT', () => {
-  pool.end();
+process.on('SIGINT', async () => {
+  const pool = getPool();
+  if (pool) {
+    await pool.end();
+  }
 });
 
-process.on('SIGTERM', () => {
-  pool.end();
+process.on('SIGTERM', async () => {
+  const pool = getPool();
+  if (pool) {
+    await pool.end();
+  }
 });

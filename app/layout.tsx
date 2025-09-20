@@ -56,6 +56,14 @@ export default async function RootLayout({
                   action={async () => {
                     'use server';
                     const { clearSession } = await import('@/src/ports/auth');
+                    const jar = await import('next/headers').then(m => m.cookies());
+                    jar.delete('sb-access-token');
+                    jar.delete('sb-refresh-token');
+                    jar.delete('sb-user-email');
+                    const projectRef = process.env.SUPABASE_PROJECT_REF;
+                    if (projectRef) {
+                      jar.delete(`sb-${projectRef}-auth-token`);
+                    }
                     await clearSession();
                   }}
                   className='inline'

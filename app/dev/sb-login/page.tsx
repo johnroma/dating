@@ -1,300 +1,309 @@
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
-import {
-  COOKIE_NAMES,
-  FORM_PLACEHOLDERS,
-  getBaseUrl,
-} from '@/src/lib/config/constants';
+import { readSupabaseSession } from '@/src/lib/auth/supabase-jwt';
 
-import {
-  sendMagicLinkAction,
-  signUpAction,
-  signInAction,
-  signOutAction,
-} from './actions';
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
-// --- Page (server component) ------------------------------------
+type SupabaseEnv = {
+  url: string;
+  anonKey: string;
+  origin: string;
+  secureCookie: boolean;
+  projectRef: string;
+};
+
+function readSupabaseEnv(): SupabaseEnv | null {
+  const url = process.env.SUPABASE_URL;
+  const anonKey = process.env.SUPABASE_ANON_KEY;
+  if (!url || !anonKey) return null;
+
+  const vercelUrl = process.env.VERCEL_URL;
+  const origin =
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    (vercelUrl ? `https://${vercelUrl}` : 'http://localhost:3000');
+
+  return {
+    url,
+    anonKey,
+    origin,
+    secureCookie: process.env.NODE_ENV === 'production',
+    projectRef: process.env.SUPABASE_PROJECT_REF || '',
+  };
+}
+
+async function setSbCookies(
+  accessToken: string,
+  options: { refreshToken?: string; expiresIn?: number; secure: boolean }
+) {
+  const jar = await cookies();
+  const maxAge =
+    typeof options.expiresIn === 'number' ? options.expiresIn : 60 * 60;
+
+  jar.set('sb-access-token', accessToken, {
+    httpOnly: true,
+    secure: options.secure,
+    sameSite: 'lax',
+    path: '/',
+    maxAge,
+  });
+
+  if (options.refreshToken) {
+    jar.set('sb-refresh-token', options.refreshToken, {
+      httpOnly: true,
+      secure: options.secure,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 14,
+    });
+  }
+}
+
+function redirectWithQuery(params: {
+  error?: string;
+  success?: string;
+}): never {
+  const query = new URLSearchParams();
+  if (params.error) query.set('error', params.error);
+  if (params.success) query.set('success', params.success);
+  const suffix = query.toString();
+  redirect(suffix ? `/dev/sb-login?${suffix}` : '/dev/sb-login');
+}
+
+const loginAction = async (formData: FormData) => {
+  'use server';
+
+  const env = readSupabaseEnv();
+  if (!env) {
+    redirectWithQuery({ error: 'missing_supabase_env' });
+  }
+  const config: SupabaseEnv = env;
+
+  const intent = String(formData.get('intent') || '');
+  const email = String(formData.get('email') || '').trim();
+  const password = String(formData.get('password') || '');
+
+  if (intent === 'signout') {
+    const jar = await cookies();
+    jar.delete('sb-access-token');
+    jar.delete('sb-refresh-token');
+    if (config.projectRef) {
+      jar.delete(`sb-${config.projectRef}-auth-token`);
+    }
+    redirect('/');
+  }
+
+  if (!email && intent !== 'signout') {
+    redirectWithQuery({ error: 'missing_email' });
+  }
+
+  const headers = {
+    apikey: config.anonKey,
+    'content-type': 'application/json',
+  };
+
+  if (intent === 'signin') {
+    const res = await fetch(`${config.url}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ email, password }),
+      cache: 'no-store',
+    });
+
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))) as Record<
+        string,
+        unknown
+      >;
+      redirectWithQuery({
+        error:
+          (typeof err.error_description === 'string' &&
+            err.error_description) ||
+          (typeof err.message === 'string' && err.message) ||
+          'signin_failed',
+      });
+    }
+
+    const data = (await res.json()) as {
+      access_token: string;
+      refresh_token?: string;
+      expires_in?: number;
+    };
+
+    await setSbCookies(data.access_token, {
+      refreshToken: data.refresh_token,
+      expiresIn: data.expires_in,
+      secure: config.secureCookie,
+    });
+
+    redirect('/me');
+  }
+
+  if (intent === 'signup') {
+    const res = await fetch(`${config.url}/auth/v1/signup`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ email, password }),
+      cache: 'no-store',
+    });
+
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))) as Record<
+        string,
+        unknown
+      >;
+      redirectWithQuery({
+        error:
+          (typeof err.error_description === 'string' &&
+            err.error_description) ||
+          (typeof err.message === 'string' && err.message) ||
+          'signup_failed',
+      });
+    }
+
+    const data = (await res.json().catch(() => null)) as {
+      access_token?: string;
+      refresh_token?: string;
+      expires_in?: number;
+    } | null;
+
+    if (data?.access_token) {
+      await setSbCookies(data.access_token, {
+        refreshToken: data.refresh_token,
+        expiresIn: data.expires_in,
+        secure: config.secureCookie,
+      });
+      redirect('/me');
+    }
+    redirectWithQuery({ success: 'signup_pending' });
+  }
+
+  if (intent === 'magic') {
+    const res = await fetch(`${config.url}/auth/v1/magiclink`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        email,
+        redirect_to: `${config.origin}/auth/callback`,
+      }),
+      cache: 'no-store',
+    });
+
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))) as Record<
+        string,
+        unknown
+      >;
+      redirectWithQuery({
+        error:
+          (typeof err.error_description === 'string' &&
+            err.error_description) ||
+          (typeof err.message === 'string' && err.message) ||
+          'magic_failed',
+      });
+    }
+
+    redirectWithQuery({ success: 'magic_sent' });
+  }
+
+  redirectWithQuery({ error: 'bad_intent' });
+};
 
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const c = await cookies();
-  const email = c.get(COOKIE_NAMES.USER_EMAIL)?.value || '';
+  const sess = await readSupabaseSession();
   const params = await searchParams;
-  const error = params.error as string | undefined;
-  const success = params.success as string | undefined;
+  const getParam = (key: string) => {
+    const value = params?.[key];
+    return Array.isArray(value) ? value[0] : value;
+  };
+  const error = getParam('error');
+  const success = getParam('success');
 
   return (
-    <div style={{ maxWidth: 600, margin: '40px auto', lineHeight: 1.5 }}>
-      <h1>Supabase Authentication (dev)</h1>
+    <div className='max-w-xl mx-auto p-6 space-y-6'>
+      <h1 className='text-2xl font-semibold'>Supabase Dev Login</h1>
 
-      {/* Environment Debug Section */}
-      <details style={{ marginBottom: '20px', fontSize: '12px' }}>
-        <summary style={{ cursor: 'pointer', marginBottom: '8px' }}>
-          Environment Status
-        </summary>
-        <div
-          style={{ padding: '8px', background: '#f5f5f5', borderRadius: '4px' }}
-        >
-          <p>
-            <strong>SUPABASE_URL:</strong>{' '}
-            {process.env.SUPABASE_URL ? '✅ Set' : '❌ Missing'}
-          </p>
-          <p>
-            <strong>SUPABASE_ANON_KEY:</strong>{' '}
-            {process.env.SUPABASE_ANON_KEY ? '✅ Set' : '❌ Missing'}
-          </p>
-          <p>
-            <strong>NEXT_PUBLIC_BASE_URL:</strong>{' '}
-            {process.env.NEXT_PUBLIC_BASE_URL || 'Not set (using default)'}
-          </p>
-          <p>
-            <strong>NODE_ENV:</strong> {process.env.NODE_ENV}
-          </p>
-        </div>
-      </details>
+      <div className='rounded border p-4'>
+        {(error || success) && (
+          <div className='mb-3'>
+            {error && <p className='text-sm text-red-600'>Error: {error}</p>}
+            {success && (
+              <p className='text-sm text-green-600'>Success: {success}</p>
+            )}
+          </div>
+        )}
+        <p className='mb-2'>
+          Status:{' '}
+          {sess ? (
+            <span>
+              <strong>{sess.email || sess.userId}</strong> ({sess.role})
+            </span>
+          ) : (
+            <em>Anon</em>
+          )}
+        </p>
 
-      {/* Error/Success Messages */}
-      {error && (
-        <div
-          style={{
-            padding: '12px',
-            marginBottom: '16px',
-            backgroundColor: '#fee2e2',
-            border: '1px solid #fca5a5',
-            borderRadius: '6px',
-            color: '#dc2626',
-          }}
-        >
-          <strong>Error:</strong> {error}
-        </div>
-      )}
+        <form action={loginAction} className='space-y-3'>
+          <input
+            name='email'
+            type='email'
+            placeholder='email'
+            className='border rounded px-3 py-2 w-full'
+            required
+          />
+          <input
+            name='password'
+            type='password'
+            placeholder='password (for password sign-in / signup)'
+            className='border rounded px-3 py-2 w-full'
+          />
 
-      {success && (
-        <div
-          style={{
-            padding: '12px',
-            marginBottom: '16px',
-            backgroundColor: '#dcfce7',
-            border: '1px solid #86efac',
-            borderRadius: '6px',
-            color: '#166534',
-          }}
-        >
-          <strong>Success:</strong> {success}
-        </div>
-      )}
-
-      {email ? (
-        // Signed in state
-        <div>
-          <p>
-            Signed in as <b>{email}</b>
-          </p>
-          <form action={signOutAction}>
+          <div className='flex gap-2 flex-wrap'>
             <button
               type='submit'
-              style={{
-                padding: '8px 16px',
-                backgroundColor: '#ef4444',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
+              name='intent'
+              value='signin'
+              className='px-3 py-2 border rounded'
+            >
+              Sign in
+            </button>
+            <button
+              type='submit'
+              name='intent'
+              value='signup'
+              className='px-3 py-2 border rounded'
+            >
+              Sign up
+            </button>
+            <button
+              type='submit'
+              name='intent'
+              value='magic'
+              className='px-3 py-2 border rounded'
+            >
+              Send magic link
+            </button>
+            <button
+              type='submit'
+              name='intent'
+              value='signout'
+              className='px-3 py-2 border rounded'
             >
               Sign out
             </button>
-          </form>
-        </div>
-      ) : (
-        // Not signed in - show auth options
-        <div>
-          <p style={{ marginBottom: '24px' }}>
-            Choose your authentication method:
-          </p>
-
-          {/* Magic Link Section */}
-          <section style={{ marginBottom: '32px' }}>
-            <h3 style={{ marginBottom: '12px' }}>
-              🔗 Magic Link (Passwordless)
-            </h3>
-            <p
-              style={{
-                fontSize: '14px',
-                color: '#6b7280',
-                marginBottom: '12px',
-              }}
-            >
-              Enter your email and we&apos;ll send you a sign-in link.
-            </p>
-            <form action={sendMagicLinkAction}>
-              <input
-                name='email'
-                type='email'
-                placeholder={FORM_PLACEHOLDERS.EMAIL}
-                required
-                style={{
-                  width: '100%',
-                  marginBottom: '8px',
-                  padding: '8px',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '4px',
-                }}
-              />
-              <button
-                type='submit'
-                style={{
-                  padding: '8px 16px',
-                  backgroundColor: '#3b82f6',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                }}
-              >
-                Send magic link
-              </button>
-            </form>
-          </section>
-
-          {/* Password Authentication Section */}
-          <section>
-            <h3 style={{ marginBottom: '12px' }}>🔐 Password Authentication</h3>
-            <p
-              style={{
-                fontSize: '14px',
-                color: '#6b7280',
-                marginBottom: '16px',
-              }}
-            >
-              Sign in with email and password, or create a new account.
-            </p>
-
-            {/* Sign In Form */}
-            <div style={{ marginBottom: '20px' }}>
-              <h4 style={{ marginBottom: '8px', fontSize: '16px' }}>Sign In</h4>
-              <form action={signInAction}>
-                <input
-                  name='email'
-                  type='email'
-                  placeholder={FORM_PLACEHOLDERS.EMAIL}
-                  required
-                  style={{
-                    width: '100%',
-                    marginBottom: '8px',
-                    padding: '8px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '4px',
-                  }}
-                />
-                <input
-                  name='password'
-                  type='password'
-                  placeholder={FORM_PLACEHOLDERS.PASSWORD}
-                  required
-                  style={{
-                    width: '100%',
-                    marginBottom: '8px',
-                    padding: '8px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '4px',
-                  }}
-                />
-                <button
-                  type='submit'
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: '#10b981',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Sign in
-                </button>
-              </form>
-            </div>
-
-            {/* Sign Up Form */}
-            <div>
-              <h4 style={{ marginBottom: '8px', fontSize: '16px' }}>
-                Create Account
-              </h4>
-              <form action={signUpAction}>
-                <input
-                  name='email'
-                  type='email'
-                  placeholder={FORM_PLACEHOLDERS.EMAIL}
-                  required
-                  style={{
-                    width: '100%',
-                    marginBottom: '8px',
-                    padding: '8px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '4px',
-                  }}
-                />
-                <input
-                  name='password'
-                  type='password'
-                  placeholder={FORM_PLACEHOLDERS.PASSWORD}
-                  required
-                  style={{
-                    width: '100%',
-                    marginBottom: '8px',
-                    padding: '8px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '4px',
-                  }}
-                />
-                <button
-                  type='submit'
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: '#8b5cf6',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Create account
-                </button>
-              </form>
-            </div>
-          </section>
-        </div>
-      )}
-
-      <div style={{ marginTop: '24px', fontSize: '12px', color: '#6b7280' }}>
-        <p>
-          <strong>Setup:</strong> Add{' '}
-          <code>
-            {getBaseUrl()}
-            /auth/callback
-          </code>{' '}
-          to your Supabase redirect URLs.
-        </p>
-        <details style={{ marginTop: '8px' }}>
-          <summary style={{ cursor: 'pointer' }}>Environment Variables</summary>
-          <div style={{ marginTop: '8px', fontFamily: 'monospace' }}>
-            <p>SUPABASE_URL={process.env.SUPABASE_URL || 'Not set'}</p>
-            <p>
-              SUPABASE_ANON_KEY=
-              {process.env.SUPABASE_ANON_KEY ? 'Set' : 'Not set'}
-            </p>
-            <p>
-              NEXT_PUBLIC_BASE_URL=
-              {process.env.NEXT_PUBLIC_BASE_URL || 'Not set'}
-            </p>
-            <p>NODE_ENV={process.env.NODE_ENV}</p>
           </div>
-        </details>
+        </form>
       </div>
+
+      <p className='text-sm text-neutral-500'>
+        Magic link redirect must be allow-listed at Supabase:{' '}
+        <code>/auth/callback</code> for local + Vercel origins.
+      </p>
     </div>
   );
 }

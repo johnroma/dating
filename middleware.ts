@@ -27,46 +27,60 @@ function parseSessionCookie(
     }
   }
 
+  const adminEmails =
+    process.env.SUPABASE_ADMIN_EMAILS?.split(',')
+      .map(email => email.trim().toLowerCase())
+      .filter(Boolean) || [];
+
   // Check for Supabase session cookies
   const supabaseToken = req.cookies.get('sb-access-token')?.value;
+  const supabaseEmailCookie =
+    req.cookies.get('sb-user-email')?.value?.toLowerCase() || null;
+
   if (supabaseToken) {
     // For Supabase, we need to do a quick JWT decode without verification
     // This is not ideal but necessary for edge middleware
     try {
-      const [header, payload] = supabaseToken.split('.');
-      if (header && payload) {
+      const [, payload] = supabaseToken.split('.');
+      if (payload) {
         const decoded = JSON.parse(
           Buffer.from(payload, 'base64url').toString('utf8')
         );
-        const email = decoded.email || decoded.user_metadata?.email;
+        const tokenEmail = (decoded.email || decoded.user_metadata?.email || '')
+          .toString()
+          .toLowerCase();
+        const email = tokenEmail || supabaseEmailCookie;
 
-        // For security, we can't check the database in edge middleware
-        // So we'll be more restrictive - only allow if we're not using PostgreSQL
-        // or if we're in development mode
         if (
           process.env.DB_DRIVER?.toLowerCase() === 'postgres' &&
           process.env.NODE_ENV === 'production'
         ) {
-          // In production with PostgreSQL, we can't verify database accounts in middleware
-          // So we'll deny access and let the server-side validation handle it
+          // In production with PostgreSQL we can't hit the database from middleware;
+          // fall back to cookie-based role mapping.
+          if (email && adminEmails.includes(email)) {
+            return { role: 'admin' };
+          }
           return null;
         }
 
-        // Check if email is in admin list
-        const adminEmails =
-          process.env.SUPABASE_ADMIN_EMAILS?.split(',').map(s =>
-            s.trim().toLowerCase()
-          ) || [];
-        if (email && adminEmails.includes(email.toLowerCase())) {
+        if (email && adminEmails.includes(email)) {
           return { role: 'admin' };
         }
 
-        // Default to member for Supabase users (only in development or SQLite)
-        return { role: 'member' };
+        if (email) {
+          return { role: 'member' };
+        }
       }
     } catch {
       // Ignore JWT parsing errors
     }
+  }
+
+  if (supabaseEmailCookie) {
+    if (adminEmails.includes(supabaseEmailCookie)) {
+      return { role: 'admin' };
+    }
+    return { role: 'member' };
   }
 
   return null;
@@ -116,7 +130,7 @@ export function middleware(req: NextRequest) {
     if (sess?.role === 'member' || sess?.role === 'admin')
       return NextResponse.next();
     const url = req.nextUrl.clone();
-    url.pathname = '/dev/login';
+    url.pathname = '/dev/sb-login';
     url.searchParams.set('from', pathname);
     return NextResponse.redirect(url);
   }
