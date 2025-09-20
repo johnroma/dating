@@ -155,8 +155,16 @@ export const DEV_USERS = [
 // Helper Functions
 // ============================================================================
 
+// Prefer runtime request headers (works on Vercel) and fall back to env.
 export function getBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_BASE_URL || DEFAULT_BASE_URL;
+  // 1) Explicit override wins
+  if (process.env.NEXT_PUBLIC_BASE_URL) return process.env.NEXT_PUBLIC_BASE_URL;
+
+  // 2) Vercel runtime env provides host without protocol (works for preview+prod)
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+
+  // 3) Local dev default
+  return DEFAULT_BASE_URL;
 }
 
 export function getAuthCallbackUrl(): string {

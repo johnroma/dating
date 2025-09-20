@@ -1,4 +1,4 @@
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { readSupabaseSession } from '@/src/lib/auth/supabase-jwt';
@@ -14,15 +14,30 @@ type SupabaseEnv = {
   projectRef: string;
 };
 
-function readSupabaseEnv(): SupabaseEnv | null {
+async function deriveOrigin(): Promise<string> {
+  // 1) Respect explicit base URL if provided
+  if (process.env.NEXT_PUBLIC_BASE_URL) return process.env.NEXT_PUBLIC_BASE_URL;
+  // 2) Use request headers when available (Vercel/runtime safe)
+  try {
+    const h = await headers();
+    const host = h.get('x-forwarded-host') || h.get('host');
+    const proto = h.get('x-forwarded-proto') || 'https';
+    if (host) return `${proto}://${host}`;
+  } catch {
+    // Not in a request context
+  }
+  // 3) Vercel runtime env provides host without protocol
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  // 4) Local dev fallback
+  return 'http://localhost:3000';
+}
+
+async function readSupabaseEnv(): Promise<SupabaseEnv | null> {
   const url = process.env.SUPABASE_URL;
   const anonKey = process.env.SUPABASE_ANON_KEY;
   if (!url || !anonKey) return null;
 
-  const vercelUrl = process.env.VERCEL_URL;
-  const origin =
-    process.env.NEXT_PUBLIC_BASE_URL ||
-    (vercelUrl ? `https://${vercelUrl}` : 'http://localhost:3000');
+  const origin = await deriveOrigin();
 
   return {
     url,
@@ -74,7 +89,7 @@ function redirectWithQuery(params: {
 const loginAction = async (formData: FormData) => {
   'use server';
 
-  const env = readSupabaseEnv();
+  const env = await readSupabaseEnv();
   if (!env) {
     redirectWithQuery({ error: 'missing_supabase_env' });
   }
