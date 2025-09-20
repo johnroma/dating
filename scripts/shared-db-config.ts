@@ -5,6 +5,8 @@
 
 import { Pool } from 'pg';
 
+import { computePgSsl } from '../src/lib/db/pg-ssl';
+
 // Use the same connection string logic as the app's Postgres adapter
 const urlRaw = process.env.DATABASE_URL || '';
 // Fix the connection string - remove duplicate database segment and normalize query params
@@ -43,18 +45,21 @@ if (!finalConnectionString) {
   throw new Error('❌ Missing DATABASE_URL in environment variables');
 }
 
-// SSL configuration for Supabase (same as main adapter)
-// In production/Vercel, we rely on sslmode=require in the connection string
-// In development, we use our own SSL config
-const ssl = isProduction
-  ? undefined // Let sslmode=require handle SSL in production/Vercel
-  : { rejectUnauthorized: false }; // Development uses relaxed SSL
+// Use centralized SSL configuration (same as main adapter)
+const { ssl, mode } = computePgSsl(finalConnectionString);
 
 // Optimized connection pool settings (same as main adapter)
 export const createDbPool = (applicationName = 'dating-app-script') => {
+  // Log SSL mode for debugging
+  if (process.env.NODE_ENV !== 'production') {
+    console.info(`[db] postgres ssl mode: ${mode}`);
+  } else if (process.env.PG_LOG_SSL_MODE === '1') {
+    console.info(`[db] postgres ssl mode: ${mode}`);
+  }
+
   return new Pool({
     connectionString: finalConnectionString,
-    ssl,
+    ssl: ssl || undefined,
     connectionTimeoutMillis: 5000, // 5 second connection timeout
     idleTimeoutMillis: 30000, // 30 seconds idle timeout
     statement_timeout: 10000, // 10 second statement timeout

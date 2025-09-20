@@ -1,6 +1,7 @@
 import { Pool } from 'pg';
 
 import { ensurePostgresSchema } from '../ensure-postgres';
+import { computePgSsl } from '../pg-ssl';
 import type { DbPort } from '../port';
 import type { Photo, PhotoStatus } from '../types';
 
@@ -38,12 +39,8 @@ try {
   // Non-URL compliant strings (e.g. empty) fall back to the raw value.
 }
 
-// SSL configuration for Supabase
-// In production/Vercel, we rely on sslmode=require in the connection string
-// In development, we use our own SSL config
-const ssl = isProduction
-  ? undefined // Let sslmode=require handle SSL in production/Vercel
-  : { rejectUnauthorized: false }; // Development uses relaxed SSL
+// Use centralized SSL configuration
+const { ssl, mode } = computePgSsl(finalConnectionString);
 
 // Simple connection pool - no pre-warming, just basic pooling
 let pool: Pool | null = null;
@@ -51,6 +48,14 @@ let pool: Pool | null = null;
 export function getPool(): Pool {
   if (!pool) {
     console.log('Creating database connection pool...');
+
+    // Log SSL mode for debugging (in dev or when explicitly enabled)
+    if (process.env.NODE_ENV !== 'production') {
+      console.info(`[db] postgres ssl mode: ${mode}`);
+    } else if (process.env.PG_LOG_SSL_MODE === '1') {
+      console.info(`[db] postgres ssl mode: ${mode}`);
+    }
+
     pool = new Pool({
       connectionString: finalConnectionString,
       max: 10, // Multiple connections for concurrent users (Transaction Mode allows this)
@@ -58,7 +63,7 @@ export function getPool(): Pool {
       idleTimeoutMillis: 30000, // 30 seconds idle timeout
       connectionTimeoutMillis: 5000, // 5 second connection timeout
       statement_timeout: 10000, // 10 second statement timeout
-      ssl,
+      ssl: ssl || undefined,
       // Basic settings
       keepAlive: true, // Enable keep-alive for better connection reuse
       application_name: 'dating-app',

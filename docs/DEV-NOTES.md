@@ -588,3 +588,18 @@ DATABASE_URL=postgresql://user:pass@host:port/db?sslmode=require
 - Optimize timeouts for your specific database provider
 - Enable connection reuse with keep-alive
 - Monitor and tune pool settings based on usage patterns
+
+## SSL Configuration (Postgres over Vercel)
+
+#### Postgres over Vercel (TLS with Supabase pooler)
+
+- Pooler endpoints often don't present a CA chain in a way Node/OpenSSL likes. The centralized SSL helper (`src/lib/db/pg-ssl.ts`) now understands:
+  - `DATABASE_URL` query `sslmode=disable|prefer|require|no-verify|verify-full`
+  - `PGSSL_NO_VERIFY=1` (alias `PG_SSL_NO_VERIFY=1`) → forces `rejectUnauthorized:false`
+  - `PG_CA_CERT_B64` (base64 PEM) or `PG_CA_CERT` (raw PEM) → enables verification
+- Defaults for Supabase pooler (`*.pooler.supabase.com`):
+  - `sslmode=require` with **no CA** → TLS ON, **no verify** (pragmatic pooler default)
+  - Providing a CA switches to **verify**
+- To "do it right": set `PG_CA_CERT_B64` with the pooler's CA chain, keep `sslmode=require`.
+- To unblock fast: set `?sslmode=no-verify` in `DATABASE_URL` or `PGSSL_NO_VERIFY=1`.
+- Log the chosen mode by adding `PG_LOG_SSL_MODE=1` (production) or check dev logs.
