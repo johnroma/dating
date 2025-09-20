@@ -64,8 +64,7 @@ Dev uses SQLite by default; Postgres/Supabase can be enabled via env.
   - `DATABASE_FILE=.data/db/dev.db` (SQLite path)
   - `DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DB?sslmode=require` (Postgres)
 
-- Migrate/seed/open:
-  - `pnpm db:migrate` — ensures schema (run once)
+- Seed/open helpers:
   - `pnpm db:seed` — inserts a sample Photo row
   - `pnpm db:open` — opens the SQLite shell for the configured DB file
 
