@@ -116,7 +116,11 @@ export function getConnectionMetrics() {
 }
 
 // Graceful shutdown handling
+let isShuttingDown = false;
+
 process.on('SIGINT', async () => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
   console.log('Shutting down database pool...');
   if (pool) {
     await pool.end();
@@ -125,6 +129,8 @@ process.on('SIGINT', async () => {
 });
 
 process.on('SIGTERM', async () => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
   console.log('Shutting down database pool...');
   if (pool) {
     await pool.end();
@@ -536,20 +542,7 @@ export async function listPhotosByOwner(ownerId: string): Promise<Photo[]> {
   return rows.map(rowToPhoto);
 }
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
-  if (pool) {
-    await pool.end();
-  }
-  process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-  if (pool) {
-    await pool.end();
-  }
-  process.exit(0);
-});
+// Graceful shutdown handlers are defined above
 
 export const countPending: DbPort['countPending'] = async () => {
   // Schema already exists

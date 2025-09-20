@@ -180,17 +180,4 @@ export async function ensurePostgres() {
   }
 }
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
-  const pool = getPool();
-  if (pool) {
-    await pool.end();
-  }
-});
-
-process.on('SIGTERM', async () => {
-  const pool = getPool();
-  if (pool) {
-    await pool.end();
-  }
-});
+// Graceful shutdown is handled by the main postgres adapter
