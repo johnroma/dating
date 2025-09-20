@@ -602,4 +602,6 @@ DATABASE_URL=postgresql://user:pass@host:port/db?sslmode=require
   - Providing a CA switches to **verify**
 - To "do it right": set `PG_CA_CERT_B64` with the pooler's CA chain, keep `sslmode=require`.
 - To unblock fast: set `?sslmode=no-verify` in `DATABASE_URL` or `PGSSL_NO_VERIFY=1`.
+- Emergency override: set `PG_FORCE_NO_VERIFY=1` (highest priority).
 - Log the chosen mode by adding `PG_LOG_SSL_MODE=1` (production) or check dev logs.
+- Debug endpoint: `/api/_pg` returns `{ mode, ssl, testQueryOk, error }` to confirm runtime config.

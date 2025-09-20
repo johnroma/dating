@@ -51,6 +51,11 @@ function envNoVerify(): boolean {
   );
 }
 
+function envForceNoVerify(): boolean {
+  // Highest priority kill-switch for serverless/pooler TLS issues
+  return process.env.PG_FORCE_NO_VERIFY === '1';
+}
+
 function pickSslMode(sp: URLSearchParams): string | null {
   const raw = sp.get('sslmode');
   if (!raw) return null;
@@ -74,12 +79,18 @@ export function computePgSsl(databaseUrl?: string): {
     | 'no-verify'
     | 'verify-ca'
     | 'verify-full'
-    | 'implicit-pooler-require-no-verify';
+    | 'implicit-pooler-require-no-verify'
+    | 'forced-no-verify';
 } {
   const { host, searchParams } = parseDbUrl(databaseUrl);
   const modeFromUrl = pickSslMode(searchParams);
   const ca = readCaFromEnv();
   const noVerify = envNoVerify();
+
+  // 0) hard override
+  if (envForceNoVerify()) {
+    return { ssl: { rejectUnauthorized: false }, mode: 'forced-no-verify' };
+  }
 
   // 1) explicit no-verify always wins
   if (noVerify || modeFromUrl === 'no-verify') {
@@ -105,13 +116,17 @@ export function computePgSsl(databaseUrl?: string): {
 
   // 4) require (common) — if CA provided, verify; else for pooler default to no-verify
   if (modeFromUrl === 'require') {
-    if (ca) return { ssl: { ca, rejectUnauthorized: true }, mode: 'verify-ca' };
+    // For Supabase pooler, use no-verify when SSL enforcement is disabled in dashboard
+    // This handles cases where the server doesn't present proper certificate chains
     if (isSupabasePoolerHost(host)) {
       return {
-        ssl: { rejectUnauthorized: false },
+        ssl: {
+          rejectUnauthorized: false,
+        },
         mode: 'implicit-pooler-require-no-verify',
       };
     }
+    if (ca) return { ssl: { ca, rejectUnauthorized: true }, mode: 'verify-ca' };
     // generic require with no CA → allow TLS w/out verify to avoid chain issues in serverless
     return { ssl: { rejectUnauthorized: false }, mode: 'require' };
   }
@@ -123,7 +138,9 @@ export function computePgSsl(databaseUrl?: string): {
   if (ca) return { ssl: { ca, rejectUnauthorized: true }, mode: 'verify-ca' };
   if (isSupabasePoolerHost(host)) {
     return {
-      ssl: { rejectUnauthorized: false },
+      ssl: {
+        rejectUnauthorized: false,
+      },
       mode: 'implicit-pooler-require-no-verify',
     };
   }

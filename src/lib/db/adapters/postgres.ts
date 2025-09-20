@@ -49,11 +49,16 @@ export function getPool(): Pool {
   if (!pool) {
     console.log('Creating database connection pool...');
 
-    // Log SSL mode for debugging (in dev or when explicitly enabled)
-    if (process.env.NODE_ENV !== 'production') {
-      console.info(`[db] postgres ssl mode: ${mode}`);
-    } else if (process.env.PG_LOG_SSL_MODE === '1') {
-      console.info(`[db] postgres ssl mode: ${mode}`);
+    // Always log once per cold start if explicitly requested, else dev only
+    if (
+      process.env.PG_LOG_SSL_MODE === '1' ||
+      process.env.NODE_ENV !== 'production'
+    ) {
+      const brief =
+        typeof ssl === 'object'
+          ? `{rejectUnauthorized:${ssl.rejectUnauthorized === false ? 'false' : 'true'},ca:${ssl && 'ca' in ssl && (ssl as { ca?: string }).ca ? 'yes' : 'no'}}`
+          : String(ssl);
+      console.info(`[db] postgres ssl mode: ${mode} ssl=${brief}`);
     }
 
     pool = new Pool({
