@@ -118,21 +118,31 @@ const stmtInsertAudit = conn.prepare(
 // Use shared mapping function
 const mapRow = mapRowToPhoto;
 
-export const insertPhoto: DbPort['insertPhoto'] = p => {
-  stmtInsert.run(
-    p.id,
-    p.status,
-    p.origkey,
-    JSON.stringify(p.sizesjson || {}),
-    p.width ?? null,
-    p.height ?? null,
-    p.createdat,
-    p.updatedat ?? p.createdat,
-    p.rejectionreason ?? null,
-    p.phash ?? null,
-    p.duplicateof ?? null,
-    p.ownerid ?? null
-  );
+export const insertPhoto: DbPort['insertPhoto'] = (p, _userEmail?: string) => {
+  try {
+    // SQLite doesn't have foreign key constraints for account table, so we can ignore userEmail
+    // For SQLite, we don't need to check or create accounts since there are no foreign key constraints
+    stmtInsert.run(
+      p.id,
+      p.status,
+      p.origkey,
+      JSON.stringify(p.sizesjson || {}),
+      p.width ?? null,
+      p.height ?? null,
+      p.createdat,
+      p.updatedat ?? p.createdat,
+      p.rejectionreason ?? null,
+      p.phash ?? null,
+      p.duplicateof ?? null,
+      p.ownerid ?? null
+    );
+  } catch (error) {
+    console.error('SQLite error in insertPhoto:', {
+      photoId: p.id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw error;
+  }
 };
 
 export const updatePhotoSizes: DbPort['updatePhotoSizes'] = (
@@ -141,32 +151,73 @@ export const updatePhotoSizes: DbPort['updatePhotoSizes'] = (
   width,
   height
 ) => {
-  stmtUpdateSizes.run(
-    JSON.stringify(sizesjson || {}),
-    width ?? null,
-    height ?? null,
-    new Date().toISOString(),
-    id
-  );
+  try {
+    stmtUpdateSizes.run(
+      JSON.stringify(sizesjson || {}),
+      width ?? null,
+      height ?? null,
+      new Date().toISOString(),
+      id
+    );
+  } catch (error) {
+    console.error('SQLite error in updatePhotoSizes:', {
+      photoId: id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw error;
+  }
 };
 
 export const setStatus: DbPort['setStatus'] = (id, status, extras) => {
-  const now = new Date().toISOString();
-  stmtSetStatus.run(status, extras?.rejectionreason ?? null, now, id);
+  try {
+    const now = new Date().toISOString();
+    stmtSetStatus.run(status, extras?.rejectionreason ?? null, now, id);
+  } catch (error) {
+    console.error('SQLite error in setStatus:', {
+      photoId: id,
+      status,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw error;
+  }
 };
 
 export const deletePhoto: DbPort['deletePhoto'] = id => {
-  stmtDelete.run(id);
+  try {
+    stmtDelete.run(id);
+  } catch (error) {
+    console.error('SQLite error in deletePhoto:', {
+      photoId: id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw error;
+  }
 };
 
 export const restorePhoto: NonNullable<DbPort['restorePhoto']> = id => {
-  const now = new Date().toISOString();
-  stmtRestore.run(now, id);
+  try {
+    const now = new Date().toISOString();
+    stmtRestore.run(now, id);
+  } catch (error) {
+    console.error('SQLite error in restorePhoto:', {
+      photoId: id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw error;
+  }
 };
 
 export const getByOrigKey: DbPort['getByOrigKey'] = origkey => {
-  const row = stmtGetByOrig.get(origkey);
-  return mapRow(row);
+  try {
+    const row = stmtGetByOrig.get(origkey);
+    return mapRow(row);
+  } catch (error) {
+    console.error('SQLite error in getByOrigKey:', {
+      origKey: origkey,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return undefined;
+  }
 };
 
 // Step 7 helpers (not in DbPort on purpose; import directly when needed)

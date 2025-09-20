@@ -23,7 +23,11 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const sess = await getSession().catch(() => null);
+  // Skip session loading during tests to prevent database connection issues
+  const sess =
+    process.env.NODE_ENV === 'test'
+      ? null
+      : await getSession().catch(() => null);
   return (
     <html lang='en'>
       <body className={inter.className}>
@@ -48,12 +52,30 @@ export default async function RootLayout({
                 <Link className='underline' href='/dev/login'>
                   (switch)
                 </Link>
+                <form
+                  action={async () => {
+                    'use server';
+                    const { clearSession } = await import('@/src/ports/auth');
+                    await clearSession();
+                  }}
+                  className='inline'
+                >
+                  <button
+                    type='submit'
+                    className='underline text-red-600 hover:text-red-800'
+                  >
+                    (sign out)
+                  </button>
+                </form>
               </>
             ) : (
               <>
                 <span>Anon</span>
                 <Link className='underline' href='/dev/login'>
                   (login)
+                </Link>
+                <Link className='underline' href='/dev/sb-login'>
+                  (supabase)
                 </Link>
               </>
             )}

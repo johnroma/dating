@@ -2,30 +2,11 @@ import Link from 'next/link';
 
 import { getDb } from '@/src/lib/db';
 
-import { setPhotoStatus } from '../mod/actions';
+import { approvePhoto, rejectPhoto, restorePhoto } from '../mod/actions';
 
 export default async function ModeratePage() {
   const db = getDb();
   const items = await db.listRecent(200, 0);
-
-  async function restoreAction(formData: FormData) {
-    'use server';
-    const id = String(formData.get('id'));
-    await setPhotoStatus(id, 'APPROVED');
-  }
-
-  async function approveAction(formData: FormData) {
-    'use server';
-    const id = String(formData.get('id'));
-    await setPhotoStatus(id, 'APPROVED');
-  }
-
-  async function rejectAction(formData: FormData) {
-    'use server';
-    const id = String(formData.get('id'));
-    const reason = String(formData.get('reason') || '');
-    await setPhotoStatus(id, 'REJECTED', reason || null);
-  }
 
   return (
     <main className='mx-auto max-w-5xl p-6'>
@@ -56,7 +37,7 @@ export default async function ModeratePage() {
             <div className='space-y-2'>
               {/* Approve/Reject buttons */}
               <div className='flex gap-2'>
-                <form action={approveAction} className='flex-1'>
+                <form action={approvePhoto} className='flex-1'>
                   <input type='hidden' name='id' value={p.id} />
                   <button
                     type='submit'
@@ -66,7 +47,7 @@ export default async function ModeratePage() {
                     {p.status === 'APPROVED' ? 'Approved' : 'Approve'}
                   </button>
                 </form>
-                <form action={rejectAction} className='flex-1'>
+                <form action={rejectPhoto} className='flex-1'>
                   <input type='hidden' name='id' value={p.id} />
                   <button
                     type='submit'
@@ -79,7 +60,7 @@ export default async function ModeratePage() {
               </div>
 
               {/* Rejection reason input */}
-              <form action={rejectAction}>
+              <form action={rejectPhoto}>
                 <input type='hidden' name='id' value={p.id} />
                 <input
                   type='text'
@@ -98,7 +79,7 @@ export default async function ModeratePage() {
 
               {/* Restore button for rejected items */}
               {p.status === 'REJECTED' && (
-                <form action={restoreAction}>
+                <form action={restorePhoto}>
                   <input type='hidden' name='id' value={p.id} />
                   <button className='w-full rounded border bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100'>
                     Restore

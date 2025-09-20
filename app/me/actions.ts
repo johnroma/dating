@@ -1,7 +1,6 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
 
 import { getDb } from '@/src/lib/db';
 import { getSession } from '@/src/ports/auth';
@@ -9,7 +8,7 @@ import { getStorage } from '@/src/ports/storage';
 
 export async function deletePhoto(id: string) {
   const sess = await getSession().catch(() => null);
-  if (!sess) redirect('/dev/login?from=/me');
+  if (!sess) throw new Error('Authentication required. Please sign in.');
 
   const db = getDb();
   const photo = await db.getPhoto(id);

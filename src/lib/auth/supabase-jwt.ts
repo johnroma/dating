@@ -28,7 +28,15 @@ let cachedJwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 
 function getJwks() {
   if (!cachedJwks) {
-    cachedJwks = createRemoteJWKSet(jwksUrl());
+    // Only create JWKS if we have Supabase configuration
+    // This prevents network calls during SQLite tests
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_PROJECT_REF) {
+      cachedJwks = createRemoteJWKSet(jwksUrl());
+    } else {
+      // For SQLite tests, return null to avoid any network calls
+      // The readSupabaseSession function will handle this gracefully
+      cachedJwks = null as any;
+    }
   }
   return cachedJwks;
 }
@@ -56,22 +64,152 @@ export async function readSupabaseSession(): Promise<Session> {
   const map = new Map<string, string>();
   for (const { name, value } of c.getAll()) map.set(name, value);
   const token = pickAccessTokenCookie(map);
-  if (!token) return null;
+
+  if (!token) {
+    return null;
+  }
 
   try {
+    const jwks = getJwks();
+    if (!jwks) {
+      // No JWKS available (e.g., in SQLite tests), return null
+      return null;
+    }
+
     const iss = `https://${projectRef()}.supabase.co/auth/v1`;
-    const { payload } = await jwtVerify(token, getJwks(), {
+
+    const { payload } = await jwtVerify(token, jwks, {
       issuer: iss,
     });
+
     const email =
       (payload.email as string | undefined) ||
       ((payload.user_metadata as JWTPayload | undefined)?.email as
         | string
         | undefined);
     const userId = (payload.sub as string | undefined) || '';
-    if (!userId) return null;
-    return { userId, email, role: normalizeRole(email) };
+
+    if (!userId) {
+      return null;
+    }
+
+    // Check if user exists in database, create account if they don't
+    const hasDbAccount = await checkUserExistsInDatabase(userId);
+
+    if (!hasDbAccount) {
+      try {
+        // Auto-create database account for new Supabase users
+        await createDatabaseAccountForSupabaseUser(userId, email);
+      } catch (error) {
+        // If account creation fails, log but don't block authentication
+        console.error('Failed to create database account for Supabase user:', {
+          userId: `${userId.slice(0, 8)}...`,
+          email,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        // Continue with authentication even if account creation fails
+        // The user will get an error when trying to upload, but can still browse
+      }
+    }
+
+    const role = normalizeRole(email);
+    return { userId, email, role };
   } catch {
     return null;
+  }
+}
+
+async function checkUserExistsInDatabase(userId: string): Promise<boolean> {
+  try {
+    // Only check if we're using PostgreSQL
+    if (process.env.DB_DRIVER?.toLowerCase() !== 'postgres') {
+      return true; // Skip check for SQLite
+    }
+
+    // Skip database check for dev users (hardcoded IDs)
+    if (userId === 'admin' || userId === 'member') {
+      return true; // Allow dev users
+    }
+
+    // For real Supabase users, check if they exist in database
+    // Use a timeout to prevent hanging
+    const checkPromise = (async () => {
+      const { getDb } = await import('../db');
+      const db = getDb();
+
+      // Use the listMembers function to check if user exists
+      // Handle both sync (SQLite) and async (PostgreSQL) versions
+      const membersResult = (db as any).listMembers?.();
+      const members =
+        membersResult instanceof Promise ? await membersResult : membersResult;
+      const exists = (members || []).some(
+        (member: any) => member.id === userId
+      );
+
+      return exists;
+    })();
+
+    const timeoutPromise = new Promise<boolean>((_, reject) => {
+      setTimeout(() => reject(new Error('Database check timeout')), 3000);
+    });
+
+    const exists = await Promise.race([checkPromise, timeoutPromise]);
+
+    return exists;
+  } catch {
+    // If we can't check the database, allow access
+    // This prevents database connection issues from blocking valid Supabase users
+    return true;
+  }
+}
+
+async function createDatabaseAccountForSupabaseUser(
+  userId: string,
+  email?: string
+): Promise<void> {
+  try {
+    // Only create accounts for PostgreSQL
+    if (process.env.DB_DRIVER?.toLowerCase() !== 'postgres') {
+      return; // Skip for SQLite
+    }
+
+    // Skip creating accounts for dev users
+    if (userId === 'admin' || userId === 'member') {
+      return;
+    }
+
+    // Use a simple database query with timeout
+    const { Pool } = await import('pg');
+    const pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+      max: 1, // Use only 1 connection for this operation
+      connectionTimeoutMillis: 5000, // 5 second timeout
+      idleTimeoutMillis: 10000, // 10 second idle timeout
+    });
+
+    try {
+      // Create a new database account for the Supabase user
+      const displayName = email ? email.split('@')[0] : 'Supabase User';
+      const role = 'member'; // Default role for new Supabase users
+
+      await pool.query(
+        'INSERT INTO account (id, displayname, role, createdat) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING',
+        [userId, displayName, role, new Date().toISOString()]
+      );
+
+      // Account created successfully
+    } finally {
+      // Always close the pool to prevent connection leaks
+      await pool.end();
+    }
+  } catch (error) {
+    // Log error and re-throw for proper error handling
+    console.error('Failed to create database account for Supabase user:', {
+      userId: `${userId.slice(0, 8)}...`,
+      email: email || 'No email provided',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw error;
   }
 }

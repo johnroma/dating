@@ -24,26 +24,149 @@ This is permanent for local dev.
 
 ## Auth (Supabase, portable)
 
-- We support Supabase Auth by verifying the access token JWT **server-side** using `SUPABASE_JWT_SECRET` (HS256).
+- We support Supabase Auth by verifying the access token JWT **server-side** using ES256 + JWKS.
 - No SDK lock-in; this lives behind the **auth port** and can be replaced later.
 - `getSession()` (HYBRID):
   1. Tries dev `sess` cookie (local).
-  2. If absent, tries Supabase access token from cookies/Authorization and verifies HS256 using `SUPABASE_JWT_SECRET`.
-  3. Maps role: `admin` if the **subject** or **email** matches allowlists; otherwise `member`.
+  2. If absent, tries Supabase access token from cookies/Authorization and verifies ES256 using JWKS.
+  3. Maps role: `admin` if the **email** matches allowlist; otherwise `member`.
   4. Returns `{ userId, role }` or `null`.
 
 ### Env (add to .env/.vercel)
 
 ```
-# Auth driver hint (optional): dev | supabase | hybrid
-# Defaults: 'dev' locally, 'supabase' on Vercel (reads AUTH_DRIVER or VERCEL)
+# Auth driver: dev | supabase | hybrid
 AUTH_DRIVER=hybrid
-SUPABASE_URL=...                  # for your reference; not used by the verifier
-SUPABASE_JWT_SECRET=...           # Settings → API → JWT secret (HS256)
-# Admin allowlists (optional). Comma-separated IDs/emails.
-AUTH_ADMIN_USER_IDS=
-AUTH_ADMIN_EMAILS=
+SUPABASE_PROJECT_REF=your-project-ref
+SUPABASE_JWKS_URL=https://your-project-ref.supabase.co/auth/v1/keys  # optional; derives from ref if omitted
+SUPABASE_ADMIN_EMAILS=admin@example.com,moderator@example.com  # comma-separated emails
 ```
+
+### Dev ▸ Supabase Login (local only)
+
+- Set `AUTH_DRIVER=supabase` in `.env.local`.
+- Add these envs:
+  - `SUPABASE_URL=https://<PROJECT_REF>.supabase.co`
+  - `SUPABASE_ANON_KEY=<public anon key>`
+
+### Enhanced Supabase Authentication (2024-12-19)
+
+**Dual Authentication Interface** (`/dev/sb-login`):
+
+- **Magic Link Flow**: Passwordless authentication via email links
+- **Password Flow**: Traditional email + password signin/signup
+- **Clean UI**: Side-by-side interface for choosing authentication method
+- **Environment Debug**: Collapsible section showing configuration status
+
+**Zod Validation Integration** (`src/lib/validation/auth.ts`):
+
+- **Environment Validation**: Validates all required env vars at startup with clear error messages
+- **Form Validation**: Email format, password length, required fields with user-friendly errors
+- **API Response Validation**: Type-safe validation of Supabase API responses
+- **Centralized Schemas**: Single source of truth for all validation rules
+
+**Raw Supabase REST API** (No SDK dependency):
+
+- **Lightweight**: Direct HTTP calls to Supabase Auth REST endpoints
+- **Full Control**: Explicit API calls with custom error handling
+- **Type Safety**: Zod schemas provide better type safety than generated types
+- **Server Actions**: All authentication handled via Next.js server actions
+
+**Key Features**:
+
+- **Magic Link**: `POST /auth/v1/otp` with `type: 'magiclink'` and `create_user: true`
+- **Password Auth**: `POST /auth/v1/signup` and `POST /auth/v1/token?grant_type=password`
+- **Callback Handling**: `/auth/callback` route exchanges magic link codes for tokens
+- **Cookie Management**: Sets `sb-access-token`, `sb-refresh-token`, and `sb-user-email` cookies
+- **Error Handling**: Comprehensive error messages with proper HTTP status codes
+
+**Setup Requirements**:
+
+- Add `http://localhost:3000/auth/callback` to Supabase Redirect URLs
+- Set `NEXT_PUBLIC_BASE_URL` for production callback URLs
+- Environment variables validated at startup with helpful error messages
+
+**Benefits**:
+
+- **No SDK Lock-in**: Easy to switch auth providers or customize behavior
+- **Type Safety**: Zod provides better validation than Supabase generated types
+- **Custom Error Messages**: Tailored error messages for better UX
+- **Server-Side Focused**: Perfect for Next.js App Router server actions
+- **Maintainable**: Clear separation of concerns with validation schemas
+
+### Authentication System Refactoring (2024-12-19)
+
+**Server Actions Architecture**:
+
+- **Separated Actions**: Moved all server actions to dedicated `actions.ts` files
+  - `app/dev/sb-login/actions.ts` - Supabase authentication actions
+  - `app/dev/login/actions.ts` - Dev authentication actions
+  - `app/mod/actions.ts` - Photo moderation actions
+- **Next.js 15 Compliance**: Proper server action structure with `'use server'` directive
+- **No Try-Catch Around Redirects**: Fixed `NEXT_REDIRECT` errors by removing try-catch blocks around `redirect()` calls
+- **Form Integration**: Direct form action integration without client-side JavaScript
+
+**Constants Centralization** (`src/lib/config/constants.ts`):
+
+- **Centralized Configuration**: All hardcoded values moved to single configuration file
+- **Route Constants**: All application routes defined in one place
+- **Cookie Configuration**: Standardized cookie names, settings, and expiry times
+- **Supabase Configuration**: API endpoints, grant types, and configuration values
+- **Error/Success Messages**: Consistent messaging throughout the application
+- **Form Placeholders**: Standardized form input placeholders
+
+**Role-Based Access Control**:
+
+- **Admin Email Configuration**: `SUPABASE_ADMIN_EMAILS` environment variable for admin role assignment
+- **Automatic Role Detection**: Email-based role assignment for Supabase users
+- **Dev Role Switching**: Easy switching between member and admin roles in development
+- **Session Management**: Secure cookie-based session storage with role information
+
+**Code Quality Improvements**:
+
+- **Debugging Cleanup**: Removed all `console.log` statements for production readiness
+- **Type Safety**: Full TypeScript coverage with proper error handling
+- **Validation**: Comprehensive Zod schemas for all data validation
+- **Error Handling**: Proper error boundaries and user-friendly error messages
+- **Performance**: Server-side rendering with minimal client-side JavaScript
+
+**Authentication Flow**:
+
+- **Dual Driver Support**: Switch between `supabase` and `dev` authentication via `AUTH_DRIVER` env var
+- **Session Portability**: Same session interface regardless of authentication method
+- **JWT Verification**: Secure token validation using JWKS for Supabase tokens
+- **Cookie Security**: HTTP-only cookies with proper security settings
+- **Redirect Handling**: Proper Next.js redirect patterns for authentication flows
+
+### Database Compatibility & Error Handling (2024-12-19)
+
+**SQLite/PostgreSQL Compatibility**:
+
+- **Unified Interface**: Both database adapters implement the same `DbPort` interface
+- **Async/Sync Handling**: Auth code properly handles both sync (SQLite) and async (PostgreSQL) `listMembers` functions
+- **Database Detection**: Automatic detection of database driver for appropriate handling
+- **Connection Management**: Optimized connection pools and timeouts for both databases
+
+**Comprehensive Error Handling**:
+
+- **Database Timeouts**: 3-second timeouts on all database queries to prevent hanging
+- **Connection Errors**: Graceful handling of database connection failures
+- **Query Failures**: Empty array returns instead of crashes when queries fail
+- **User-Friendly Messages**: Clear error messages for users when operations fail
+- **Production Logging**: Structured error logging for debugging without exposing sensitive data
+
+**Automatic Account Management**:
+
+- **Supabase Integration**: New Supabase users automatically get database accounts
+- **Account Creation**: Seamless account creation during first authentication
+- **Foreign Key Constraints**: Proper handling of PostgreSQL foreign key constraints
+- **Dev User Support**: Hardcoded dev users work with both database types
+
+**Build & Type Safety**:
+
+- **TypeScript Compliance**: All type errors resolved for production builds
+- **Linting Clean**: Only necessary warnings remain (console.error for logging, any types for database rows)
+- **Production Ready**: Clean, maintainable code suitable for production deployment
 
 ### Middleware
 

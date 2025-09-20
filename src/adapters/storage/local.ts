@@ -38,10 +38,18 @@ function variantPath(photoId: string, size: 'sm' | 'md' | 'lg'): string {
 }
 
 async function writeOriginal(key: string, buf: Buffer): Promise<void> {
-  const abs = origPath(key);
-  const dir = path.dirname(abs);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  await fs.promises.writeFile(abs, buf);
+  try {
+    const abs = origPath(key);
+    const dir = path.dirname(abs);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    await fs.promises.writeFile(abs, buf);
+  } catch (error) {
+    console.error('Local storage error in writeOriginal:', {
+      key,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw error;
+  }
 }
 
 async function writeVariant(
@@ -49,10 +57,19 @@ async function writeVariant(
   size: 'sm' | 'md' | 'lg',
   buf: Buffer
 ): Promise<void> {
-  const abs = variantPath(photoId, size);
-  const dir = path.dirname(abs);
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  await fs.promises.writeFile(abs, buf);
+  try {
+    const abs = variantPath(photoId, size);
+    const dir = path.dirname(abs);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    await fs.promises.writeFile(abs, buf);
+  } catch (error) {
+    console.error('Local storage error in writeVariant:', {
+      photoId,
+      size,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw error;
+  }
 }
 
 export const storage: StoragePort = {
@@ -84,7 +101,15 @@ export const storage: StoragePort = {
   },
 
   async readOriginalBuffer(origKey: string): Promise<Buffer> {
-    const p = path.join(localOrigRoot(), origKey);
-    return await fs.promises.readFile(p);
+    try {
+      const p = path.join(localOrigRoot(), origKey);
+      return await fs.promises.readFile(p);
+    } catch (error) {
+      console.error('Local storage error in readOriginalBuffer:', {
+        origKey,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw error;
+    }
   },
 };

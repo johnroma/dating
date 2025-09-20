@@ -19,10 +19,18 @@ export function variantPath(photoId: string, size: 'sm' | 'md' | 'lg'): string {
 }
 
 export async function writeOriginal(key: string, buf: Buffer): Promise<void> {
-  const abs = origPath(key);
-  const dir = path.dirname(abs);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  await fs.promises.writeFile(abs, buf);
+  try {
+    const abs = origPath(key);
+    const dir = path.dirname(abs);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    await fs.promises.writeFile(abs, buf);
+  } catch (error) {
+    console.error('File system error in writeOriginal:', {
+      key,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw error;
+  }
 }
 
 export async function writeVariant(
@@ -30,14 +38,31 @@ export async function writeVariant(
   size: 'sm' | 'md' | 'lg',
   buf: Buffer
 ): Promise<void> {
-  const abs = variantPath(photoId, size);
-  const dir = path.dirname(abs);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  await fs.promises.writeFile(abs, buf);
+  try {
+    const abs = variantPath(photoId, size);
+    const dir = path.dirname(abs);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    await fs.promises.writeFile(abs, buf);
+  } catch (error) {
+    console.error('File system error in writeVariant:', {
+      photoId,
+      size,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw error;
+  }
 }
 
 export function readStream(absPath: string): Readable {
-  return fs.createReadStream(absPath);
+  try {
+    return fs.createReadStream(absPath);
+  } catch (error) {
+    console.error('File system error in readStream:', {
+      absPath,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw error;
+  }
 }
 
 export function exists(absPath: string): boolean {

@@ -1,9 +1,9 @@
 // Step 2: Dev login page. Pick between member and admin.
 import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
 
 import { getDevUsers } from '@/src/lib/users/dev';
-import { clearSession, setSession, mapDbRoleToAppRole } from '@/src/ports/auth';
+
+import { signInAction, signOutAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,23 +22,6 @@ export default async function Page({
   const store = await cookies();
   const me = store.get('sess')?.value ? true : false;
 
-  async function signIn(formData: FormData) {
-    'use server';
-    const userId = String(formData.get('userId') || '');
-    // Derive role from the chosen account (DB/defaults)
-    const users = await getDevUsers();
-    const chosen = users.find(u => u.id === userId) || users[0];
-    const role = mapDbRoleToAppRole(chosen?.role ?? 'member');
-    await setSession({ userId, role });
-    redirect(from || '/');
-  }
-
-  async function signOut() {
-    'use server';
-    await clearSession();
-    redirect('/dev/login');
-  }
-
   return (
     <div style={{ maxWidth: 680, margin: '40px auto', padding: '12px 16px' }}>
       <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 12 }}>
@@ -48,7 +31,10 @@ export default async function Page({
         Pick a local member. This sets a signed <code>sess</code> cookie.
       </p>
       <form
-        action={signIn}
+        action={async formData => {
+          'use server';
+          return signInAction(formData, from);
+        }}
         style={{ display: 'grid', gap: 12, margin: '12px 0' }}
       >
         <select name='userId' style={{ padding: 8 }}>
@@ -70,7 +56,7 @@ export default async function Page({
         </button>
       </form>
       {me ? (
-        <form action={signOut}>
+        <form action={signOutAction}>
           <button type='submit' style={{ padding: '6px 10px' }}>
             Sign out
           </button>

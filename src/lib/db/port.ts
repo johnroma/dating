@@ -1,7 +1,7 @@
 import { Photo, PhotoStatus } from './types';
 
 export type DbPort = {
-  insertPhoto(p: Photo): void | Promise<void>;
+  insertPhoto(p: Photo, userEmail?: string): void | Promise<void>;
   updatePhotoSizes(
     id: string,
     sizesjson: Record<string, string>,
