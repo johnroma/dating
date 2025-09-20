@@ -94,6 +94,15 @@ SUPABASE_ADMIN_EMAILS=admin@example.com,moderator@example.com  # comma-separated
 - **Server-Side Focused**: Perfect for Next.js App Router server actions
 - **Maintainable**: Clear separation of concerns with validation schemas
 
+### Auth routes & env reads (Vercel-safe)
+
+- **Do not** read or validate env at module scope in route files (e.g. `/auth/callback/route.ts`).
+- Always read `process.env.*` **inside** the request handler/action and mark the route:
+  ```ts
+  export const runtime = 'nodejs';
+  export const dynamic = 'force-dynamic';
+  ```
+
 ### Authentication System Refactoring (2024-12-19)
 
 **Server Actions Architecture**:

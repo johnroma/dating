@@ -25,10 +25,13 @@ import {
   otpResponseSchema,
 } from '@/src/lib/validation/auth';
 
-// Validate environment variables at startup
-const env = validateEnv();
+type AuthEnv = ReturnType<typeof validateEnv>;
 
-function jsonHeaders() {
+function readAuthEnv(): AuthEnv {
+  return validateEnv();
+}
+
+function jsonHeaders(env: AuthEnv) {
   return {
     'Content-Type': 'application/json',
     apikey: env.SUPABASE_ANON_KEY,
@@ -38,6 +41,7 @@ function jsonHeaders() {
 // --- Magic Link Actions -----------------------------------------------------
 
 export async function sendMagicLinkAction(formData: FormData) {
+  const env = readAuthEnv();
   const { email } = validateFormData(magicLinkSchema, formData);
 
   // Supabase REST: POST /auth/v1/otp, type: 'magiclink'
@@ -45,7 +49,7 @@ export async function sendMagicLinkAction(formData: FormData) {
     `${env.SUPABASE_URL}${SUPABASE_ENDPOINTS.MAGIC_LINK}`,
     {
       method: 'POST',
-      headers: jsonHeaders(),
+      headers: jsonHeaders(env),
       body: JSON.stringify({
         email,
         type: SUPABASE_CONFIG.MAGIC_LINK_TYPE,
@@ -83,6 +87,7 @@ export async function sendMagicLinkAction(formData: FormData) {
 // --- Password Actions -----------------------------------------------------
 
 export async function signUpAction(formData: FormData) {
+  const env = readAuthEnv();
   const { email, password } = validateFormData(passwordAuthSchema, formData);
 
   // If you want email-confirm flow, Supabase will email the user.
@@ -91,7 +96,7 @@ export async function signUpAction(formData: FormData) {
     `${env.SUPABASE_URL}${SUPABASE_ENDPOINTS.SIGNUP}`,
     {
       method: 'POST',
-      headers: jsonHeaders(),
+      headers: jsonHeaders(env),
       body: JSON.stringify({
         email,
         password,
@@ -120,13 +125,14 @@ export async function signUpAction(formData: FormData) {
 }
 
 export async function signInAction(formData: FormData) {
+  const env = readAuthEnv();
   const { email, password } = validateFormData(passwordAuthSchema, formData);
 
   const response = await fetch(
     `${env.SUPABASE_URL}${SUPABASE_ENDPOINTS.SIGNIN}?grant_type=${SUPABASE_CONFIG.GRANT_TYPE_PASSWORD}`,
     {
       method: 'POST',
-      headers: jsonHeaders(),
+      headers: jsonHeaders(env),
       body: JSON.stringify({ email, password }),
     }
   );

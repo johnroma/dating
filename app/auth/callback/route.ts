@@ -1,5 +1,5 @@
 // Handles magic links / OAuth callbacks
-// Add this URL to Supabase Redirect URLs: http://localhost:3000/auth/callback
+// IMPORTANT: Do NOT read or validate env at module scope in routes.
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
@@ -13,15 +13,24 @@ import {
   ERROR_MESSAGES,
   SUCCESS_MESSAGES,
 } from '@/src/lib/config/constants';
+// Keep the types/schemas import-safe at module scope;
+// avoid calling any validation that throws here.
 import {
-  validateEnv,
   validateApiResponse,
   tokenResponseSchema,
   errorResponseSchema,
 } from '@/src/lib/validation/auth';
 
-// Validate environment variables at startup
-const env = validateEnv();
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+// Read env safely at runtime inside the handler (prevents Vercel build failures)
+function readAuthEnv() {
+  return {
+    SUPABASE_URL: process.env.SUPABASE_URL,
+    SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
+  } as const;
+}
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -46,6 +55,19 @@ export async function GET(req: Request) {
     );
   }
 
+  const env = readAuthEnv();
+  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
+    // Graceful runtime error (no import-time throw)
+    return NextResponse.json(
+      {
+        error: 'missing_env',
+        message:
+          'SUPABASE_URL and SUPABASE_ANON_KEY are required at runtime. Set them in Vercel Project → Settings → Environment Variables.',
+      },
+      { status: 500 }
+    );
+  }
+
   try {
     // PKCE/OAuth code exchange (supported by Supabase Auth)
     const response = await fetch(
@@ -57,19 +79,20 @@ export async function GET(req: Request) {
           apikey: env.SUPABASE_ANON_KEY,
         },
         body: JSON.stringify({ code }),
+        cache: 'no-store',
       }
     );
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const error = validateApiResponse(errorResponseSchema, data);
-      const errorMessage =
-        error.error_description ||
-        error.error ||
+      const parsed = validateApiResponse(errorResponseSchema, data);
+      const msg =
+        parsed.error_description ||
+        parsed.error ||
         ERROR_MESSAGES.TOKEN_EXCHANGE_FAILED;
       return NextResponse.redirect(
         new URL(
-          `${ROUTES.DEV_SB_LOGIN}?error=${encodeURIComponent(errorMessage)}`,
+          `${ROUTES.DEV_SB_LOGIN}?error=${encodeURIComponent(msg)}`,
           url.origin
         )
       );
@@ -115,18 +138,18 @@ export async function GET(req: Request) {
       });
     }
 
+    // Land back on login with a success (or redirect to '/' if you prefer)
     return NextResponse.redirect(
       new URL(
         `${ROUTES.DEV_SB_LOGIN}?success=${SUCCESS_MESSAGES.MAGIC_LINK_SUCCESS}`,
         url.origin
       )
     );
-  } catch (error: unknown) {
-    const errorMessage =
-      error instanceof Error ? error.message : 'Authentication failed';
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Authentication failed';
     return NextResponse.redirect(
       new URL(
-        `${ROUTES.DEV_SB_LOGIN}?error=${encodeURIComponent(errorMessage)}`,
+        `${ROUTES.DEV_SB_LOGIN}?error=${encodeURIComponent(msg)}`,
         url.origin
       )
     );
