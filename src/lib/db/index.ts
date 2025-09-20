@@ -2,9 +2,45 @@ export * from './port';
 export { getDb };
 
 import type { DbPort } from './port';
+import type { Photo } from './types';
 type AdapterModule = typeof import('./adapters/sqlite') & {
+  // Core functions that should be in both adapters
+  listRecent: (
+    limit?: number,
+    offset?: number
+  ) => unknown[] | Promise<unknown[]>;
+  listPhotosByOwner: (ownerId: string) => unknown[] | Promise<unknown[]>;
+  // Optional functions that might not be in all adapters
   softDeletePhoto?: (id: string) => void | Promise<void>;
   restorePhoto?: (id: string) => void | Promise<void>;
+  listRejected?: (
+    limit?: number,
+    offset?: number
+  ) => unknown[] | Promise<unknown[]>;
+  listDeleted?: (
+    limit?: number,
+    offset?: number
+  ) => unknown[] | Promise<unknown[]>;
+  listByStatus?: (
+    status: unknown,
+    limit?: number,
+    offset?: number
+  ) => unknown[] | Promise<unknown[]>;
+  getPhotosByIds?: (ids: string[]) => unknown[] | Promise<unknown[]>;
+  bulkSetStatus?: (
+    ids: string[],
+    status: unknown,
+    extras?: unknown
+  ) => void | Promise<void>;
+  getIngestKey?: (id: string) => unknown | Promise<unknown>;
+  deleteIngestKey?: (id: string) => void | Promise<void>;
+  listAuditLog?: (photoId: string) => unknown[] | Promise<unknown[]>;
+  addAuditLogEntry?: (
+    photoId: string,
+    action: string,
+    actor: string,
+    reason?: string | null
+  ) => void | Promise<void>;
 };
 
 let cached: Promise<AdapterModule> | null = null;
@@ -150,6 +186,67 @@ function getDb(): DbPort {
         return [];
       }
     },
+    listRejected: async (limit, offset) => {
+      try {
+        return ((await load()).listRejected?.(limit, offset) ?? []) as Photo[];
+      } catch (error) {
+        console.error('Database error in listRejected:', {
+          limit,
+          offset,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        return [];
+      }
+    },
+    listDeleted: async (limit, offset) => {
+      try {
+        return ((await load()).listDeleted?.(limit, offset) ?? []) as Photo[];
+      } catch (error) {
+        console.error('Database error in listDeleted:', {
+          limit,
+          offset,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        return [];
+      }
+    },
+    listByStatus: async (status, limit, offset) => {
+      try {
+        return ((await load()).listByStatus?.(status, limit, offset) ??
+          []) as Photo[];
+      } catch (error) {
+        console.error('Database error in listByStatus:', {
+          status,
+          limit,
+          offset,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        return [];
+      }
+    },
+    getPhotosByIds: async ids => {
+      try {
+        return ((await load()).getPhotosByIds?.(ids) ?? []) as Photo[];
+      } catch (error) {
+        console.error('Database error in getPhotosByIds:', {
+          ids,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        return [];
+      }
+    },
+    bulkSetStatus: async (ids, status, extras) => {
+      try {
+        return (await load()).bulkSetStatus?.(ids, status, extras);
+      } catch (error) {
+        console.error('Database error in bulkSetStatus:', {
+          ids,
+          status,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        throw error;
+      }
+    },
     countApproved: async () => {
       try {
         return (await load()).countApproved();
@@ -172,7 +269,8 @@ function getDb(): DbPort {
     },
     listRecent: async (limit, offset) => {
       try {
-        return (await load()).listRecent(limit, offset);
+        const adapter = await load();
+        return adapter.listRecent?.(limit, offset) ?? [];
       } catch (error) {
         console.error('Database error in listRecent:', {
           limit,
@@ -184,7 +282,8 @@ function getDb(): DbPort {
     },
     listPhotosByOwner: async ownerId => {
       try {
-        return (await load()).listPhotosByOwner(ownerId);
+        const adapter = await load();
+        return adapter.listPhotosByOwner?.(ownerId) ?? [];
       } catch (error) {
         console.error('Database error in listPhotosByOwner:', {
           ownerId,
@@ -196,7 +295,8 @@ function getDb(): DbPort {
     upsertIngestKey: async (id, photoid) => {
       try {
         const mod = await load();
-        return mod.upsertIngestKey?.(id, photoid);
+        const result = mod.upsertIngestKey?.(id, photoid);
+        return result ?? 'created';
       } catch (error) {
         console.error('Database error in upsertIngestKey:', {
           id,
@@ -204,6 +304,65 @@ function getDb(): DbPort {
           error: error instanceof Error ? error.message : 'Unknown error',
         });
         return 'created';
+      }
+    },
+    getIngestKey: async id => {
+      try {
+        const mod = await load();
+        return mod.getIngestKey?.(id) as
+          | { id: string; photoid: string; createdat: string }
+          | undefined;
+      } catch (error) {
+        console.error('Database error in getIngestKey:', {
+          id,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        return undefined;
+      }
+    },
+    deleteIngestKey: async id => {
+      try {
+        const mod = await load();
+        return mod.deleteIngestKey?.(id);
+      } catch (error) {
+        console.error('Database error in deleteIngestKey:', {
+          id,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        // Don't throw - key deletion failures shouldn't break the main flow
+      }
+    },
+    listAuditLog: async photoId => {
+      try {
+        const mod = await load();
+        return (mod.listAuditLog?.(photoId) ?? []) as Array<{
+          id: string;
+          photoid: string;
+          action: string;
+          actor: string;
+          reason: string | null;
+          at: string;
+        }>;
+      } catch (error) {
+        console.error('Database error in listAuditLog:', {
+          photoId,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        return [];
+      }
+    },
+    addAuditLogEntry: async (photoId, action, actor, reason) => {
+      try {
+        const mod = await load();
+        return mod.addAuditLogEntry?.(photoId, action, actor, reason);
+      } catch (error) {
+        console.error('Database error in addAuditLogEntry:', {
+          photoId,
+          action,
+          actor,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        // Don't throw - audit failures shouldn't break the main flow
       }
     },
     insertAudit: async audit => {

@@ -221,7 +221,7 @@ export const getByOrigKey: DbPort['getByOrigKey'] = origkey => {
 };
 
 // Step 7 helpers (not in DbPort on purpose; import directly when needed)
-export const upsertIngestKey = (
+export const upsertIngestKey: DbPort['upsertIngestKey'] = (
   id: string,
   photoid: string
 ): 'created' | 'exists' => {
@@ -229,6 +229,45 @@ export const upsertIngestKey = (
   if (row?.photoid) return 'exists';
   stmtUpsertIngestKey.run(id, photoid, new Date().toISOString());
   return 'created';
+};
+
+export const getIngestKey: DbPort['getIngestKey'] = id => {
+  const row = conn.prepare('SELECT * FROM ingestkeys WHERE id = ?').get(id) as
+    | { id: string; photoid: string; createdat: string }
+    | undefined;
+  return row;
+};
+
+export const deleteIngestKey: DbPort['deleteIngestKey'] = id => {
+  conn.prepare('DELETE FROM ingestkeys WHERE id = ?').run(id);
+};
+
+export const listAuditLog: DbPort['listAuditLog'] = photoId => {
+  const rows = conn
+    .prepare('SELECT * FROM auditlog WHERE photoid = ? ORDER BY at DESC')
+    .all(photoId) as Array<{
+    id: string;
+    photoid: string;
+    action: string;
+    actor: string;
+    reason: string | null;
+    at: string;
+  }>;
+  return rows;
+};
+
+export const addAuditLogEntry: DbPort['addAuditLogEntry'] = (
+  photoId,
+  action,
+  actor,
+  reason
+) => {
+  const id = `${photoId}-${Date.now()}`;
+  conn
+    .prepare(
+      'INSERT INTO auditlog (id, photoid, action, actor, reason, at) VALUES (?, ?, ?, ?, ?, ?)'
+    )
+    .run(id, photoId, action, actor, reason, new Date().toISOString());
 };
 
 export const insertAudit = (a: {
@@ -285,10 +324,66 @@ export const listApproved: DbPort['listApproved'] = (
 export const listPending: DbPort['listPending'] = (limit = 50, offset = 0) => {
   const rows = conn
     .prepare(
-      'SELECT * FROM photo WHERE status = ? ORDER BY createdat DESC LIMIT ? OFFSET ?'
+      'SELECT * FROM photo WHERE status = ? AND deletedat IS NULL ORDER BY createdat ASC LIMIT ? OFFSET ?'
     )
     .all('PENDING', limit, offset);
   return rows.map(mapRow).filter((p): p is Photo => p !== undefined);
+};
+
+export const listRejected: DbPort['listRejected'] = (
+  limit = 50,
+  offset = 0
+) => {
+  const rows = conn
+    .prepare(
+      'SELECT * FROM photo WHERE status = ? AND deletedat IS NULL ORDER BY createdat DESC LIMIT ? OFFSET ?'
+    )
+    .all('REJECTED', limit, offset);
+  return rows.map(mapRow).filter((p): p is Photo => p !== undefined);
+};
+
+export const listDeleted: DbPort['listDeleted'] = (limit = 50, offset = 0) => {
+  const rows = conn
+    .prepare(
+      'SELECT * FROM photo WHERE deletedat IS NOT NULL ORDER BY deletedat DESC LIMIT ? OFFSET ?'
+    )
+    .all(limit, offset);
+  return rows.map(mapRow).filter((p): p is Photo => p !== undefined);
+};
+
+export const listByStatus: DbPort['listByStatus'] = (
+  status,
+  limit = 50,
+  offset = 0
+) => {
+  const rows = conn
+    .prepare(
+      'SELECT * FROM photo WHERE status = ? ORDER BY createdat DESC LIMIT ? OFFSET ?'
+    )
+    .all(status, limit, offset);
+  return rows.map(mapRow).filter((p): p is Photo => p !== undefined);
+};
+
+export const getPhotosByIds: DbPort['getPhotosByIds'] = ids => {
+  if (ids.length === 0) return [];
+  const placeholders = ids.map(() => '?').join(',');
+  const rows = conn
+    .prepare(
+      sql`SELECT * FROM photo WHERE id IN (${placeholders}) ORDER BY createdat DESC`
+    )
+    .all(...ids);
+  return rows.map(mapRow).filter((p): p is Photo => p !== undefined);
+};
+
+export const bulkSetStatus: DbPort['bulkSetStatus'] = (ids, status, extras) => {
+  if (ids.length === 0) return;
+  const placeholders = ids.map(() => '?').join(',');
+  const now = new Date().toISOString();
+  conn
+    .prepare(
+      sql`UPDATE photo SET status = ?, rejectionreason = COALESCE(?, rejectionreason), updatedat = ? WHERE id IN (${placeholders})`
+    )
+    .run(status, extras?.rejectionreason ?? null, now, ...ids);
 };
 
 export const listRecent: DbPort['listRecent'] = (limit = 200, offset = 0) => {

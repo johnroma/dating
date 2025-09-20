@@ -62,12 +62,16 @@ export async function POST(req: Request) {
         const { upsertIngestKey } = await import(
           '@/src/lib/db/adapters/postgres'
         );
-        await upsertIngestKey(idem, existing.id);
+        if (upsertIngestKey) {
+          await upsertIngestKey(idem, existing.id);
+        }
       } else {
         const { upsertIngestKey } = await import(
           '@/src/lib/db/adapters/sqlite'
         );
-        upsertIngestKey(idem, existing.id);
+        if (upsertIngestKey) {
+          await upsertIngestKey(idem, existing.id);
+        }
       }
     } catch {
       // ignore ingest key upsert errors
