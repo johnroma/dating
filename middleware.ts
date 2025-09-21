@@ -5,24 +5,26 @@ import type { NextRequest } from 'next/server';
 function parseSessionCookie(
   req: NextRequest
 ): { role: 'viewer' | 'member' | 'admin' } | null {
-  // Check for dev session cookie first
-  const devSess = req.cookies.get('sess')?.value;
-  if (devSess) {
-    const [payload] = devSess.split('.');
-    if (payload) {
-      try {
-        const json = JSON.parse(
-          Buffer.from(payload, 'base64url').toString('utf8')
-        );
-        if (
-          json &&
-          (json.role === 'viewer' ||
-            json.role === 'member' ||
-            json.role === 'admin')
-        )
-          return { role: json.role };
-      } catch {
-        // Ignore parsing errors for dev session cookie
+  // Check for dev session cookie first (only in development)
+  if (process.env.NODE_ENV !== 'production') {
+    const devSess = req.cookies.get('sess')?.value;
+    if (devSess) {
+      const [payload] = devSess.split('.');
+      if (payload) {
+        try {
+          const json = JSON.parse(
+            Buffer.from(payload, 'base64url').toString('utf8')
+          );
+          if (
+            json &&
+            (json.role === 'viewer' ||
+              json.role === 'member' ||
+              json.role === 'admin')
+          )
+            return { role: json.role };
+        } catch {
+          // Ignore parsing errors for dev session cookie
+        }
       }
     }
   }
@@ -41,16 +43,7 @@ function parseSessionCookie(
         const email = decoded.email || decoded.user_metadata?.email;
 
         // For security, we can't check the database in edge middleware
-        // So we'll be more restrictive - only allow if we're not using PostgreSQL
-        // or if we're in development mode
-        if (
-          process.env.DB_DRIVER?.toLowerCase() === 'postgres' &&
-          process.env.NODE_ENV === 'production'
-        ) {
-          // In production with PostgreSQL, we can't verify database accounts in middleware
-          // So we'll deny access and let the server-side validation handle it
-          return null;
-        }
+        // But we can still allow access and let server-side validation handle it
 
         // Check if email is in admin list
         const adminEmails =
@@ -61,7 +54,7 @@ function parseSessionCookie(
           return { role: 'admin' };
         }
 
-        // Default to member for Supabase users (only in development or SQLite)
+        // Default to member for Supabase users
         return { role: 'member' };
       }
     } catch {

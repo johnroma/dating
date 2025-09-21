@@ -30,7 +30,7 @@ function getJwks() {
   if (!cachedJwks) {
     // Only create JWKS if we have Supabase configuration
     // This prevents network calls during SQLite tests
-    if (process.env.SUPABASE_URL && process.env.SUPABASE_PROJECT_REF) {
+    if (process.env.SUPABASE_PROJECT_REF) {
       cachedJwks = createRemoteJWKSet(jwksUrl());
     } else {
       // For SQLite tests, return null to avoid any network calls
@@ -66,17 +66,19 @@ export async function readSupabaseSession(): Promise<Session> {
   const token = pickAccessTokenCookie(map);
 
   if (!token) {
+    console.log('No Supabase token found');
     return null;
   }
 
   try {
     const jwks = getJwks();
     if (!jwks) {
-      // No JWKS available (e.g., in SQLite tests), return null
+      console.log('No JWKS available');
       return null;
     }
 
     const iss = `https://${projectRef()}.supabase.co/auth/v1`;
+    console.log('Verifying JWT with issuer:', iss);
 
     const { payload } = await jwtVerify(token, jwks, {
       issuer: iss,
@@ -108,8 +110,10 @@ export async function readSupabaseSession(): Promise<Session> {
     }
 
     const role = normalizeRole(email);
+    console.log('Supabase session created:', { userId, email, role });
     return { userId, email, role };
-  } catch {
+  } catch (error) {
+    console.log('JWT verification failed:', error);
     return null;
   }
 }
