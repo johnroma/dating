@@ -3,7 +3,7 @@
 import { createRemoteJWKSet, jwtVerify, JWTPayload } from 'jose';
 import { cookies } from 'next/headers';
 
-export type SessionRole = 'viewer' | 'member' | 'admin';
+export type SessionRole = 'guest' | 'member' | 'admin';
 export type Session = {
   userId: string;
   email?: string;

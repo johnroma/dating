@@ -22,7 +22,7 @@ export const ROUTES = {
 // ============================================================================
 
 export const SESSION_ROLES = {
-  VIEWER: 'viewer',
+  GUEST: 'guest',
   MEMBER: 'member',
   ADMIN: 'admin',
 } as const;

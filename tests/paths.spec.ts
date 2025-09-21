@@ -9,8 +9,8 @@ describe('paths on vercel', () => {
     process.env = old;
   });
 
-  it('localOrigDir points to /tmp on vercel', async () => {
-    const { localOrigDir } = await import('@/src/lib/paths');
-    expect(localOrigDir().startsWith('/tmp/')).toBe(true);
+  it('localOrigRoot points to /tmp on vercel', async () => {
+    const { localOrigRoot } = await import('@/src/lib/storage/paths');
+    expect(localOrigRoot().startsWith('/tmp/')).toBe(true);
   });
 });

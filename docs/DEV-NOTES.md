@@ -2,24 +2,26 @@
 
 Purpose: short, practical notes kept in sync with code. Optimized for LLMs and humans.
 
-## Current Setup (server-first, no real auth yet)
+## Current Setup (server-first, production-ready auth)
 
-- **Roles & gating**
-  - Types: `Role = 'viewer' | 'creator' | 'moderator'` in `src/lib/roles.ts` (3 application roles).
-  - Database roles: `'member' | 'admin'` (database-agnostic account IDs).
-  - Middleware (`middleware.ts`) protects routes:
-    - `/upload/**` → `creator|moderator`
-    - `/moderate/**` → `moderator`
-    - On block: redirect to `/dev/login?from=…`. Always sets `x-role` response header for debug.
-- **Dev login**
-  - `/dev/login` chooses between `member` (creator) and `admin` (moderator) accounts.
-  - Sets a signed `sess` cookie (HttpOnly) with database-agnostic account IDs.
-  - Header shows current session role with a link to `/dev/login`.
+- **Unified Role System**
+  - **Session roles**: `guest` | `member` | `admin` (used by auth system and quotas)
+  - **Application roles**: `guest` | `member` | `admin` (used by UI/middleware - same names!)
+  - **Database roles**: `member` | `admin` (stored in database)
+  - **Role mapping**: Direct 1:1 mapping between session and application roles
+- **Route Protection** (middleware uses unified roles):
+  - `/upload/**` → `member|admin` (unified roles)
+  - `/moderate/**` → `admin` (unified roles)
+  - On block: redirect to `/dev/login?from=…`. Always sets `x-role` response header for debug.
+- **Dev login** (`/dev/login`):
+  - Chooses between `member` and `admin` session roles
+  - Sets signed `sess` cookie with session roles
+  - Header shows current session role with link to `/dev/login`
 
 ## Auth (dev)
 
 **Dev session cookie:** `sess` (mock auth), via `src/ports/auth.ts`.
-`getSession()` returns `{ userId, role: 'viewer' | 'member' | 'admin' }`.
+`getSession()` returns `{ userId, role: 'guest' | 'member' | 'admin' }` (unified roles).
 This is permanent for local dev.
 
 ## Auth (Supabase, portable)
@@ -30,7 +32,7 @@ This is permanent for local dev.
   1. Tries dev `sess` cookie (local).
   2. If absent, tries Supabase access token from cookies/Authorization and verifies ES256 using JWKS.
   3. Maps role: `admin` if the **email** matches allowlist; otherwise `member`.
-  4. Returns `{ userId, role }` or `null`.
+  4. Returns `{ userId, role: 'guest' | 'member' | 'admin' }` or `null` (unified roles).
 
 ### Env (add to .env/.vercel)
 
@@ -199,9 +201,9 @@ SUPABASE_ADMIN_EMAILS=admin@example.com,moderator@example.com  # comma-separated
 
 ## Users & Roles (database-agnostic)
 
-### **Two-Layer Role System**
+### **Unified Role System**
 
-The application uses a **two-layer role system** for maximum flexibility and database portability:
+The application uses a **unified role system** for maximum clarity and zero mental overhead:
 
 #### **1. Database Layer (Simple & Portable)**
 
@@ -209,36 +211,42 @@ The application uses a **two-layer role system** for maximum flexibility and dat
 - **Database-agnostic account IDs**: `member` and `admin` work with both SQLite and PostgreSQL
 - **Purpose**: Simple, portable account management that works across different databases
 
-#### **2. Application Layer (Rich Permissions)**
+#### **2. Session & Application Layer (Unified)**
 
-- **Application roles**: `viewer`, `creator`, `moderator` (used throughout the app)
+- **Unified roles**: `guest`, `member`, `admin` (used by both session and application layers)
 - **Role mapping**:
-  - `member` (database) → `creator` (application)
-  - `admin` (database) → `moderator` (application)
-- **Purpose**: Rich permission system for fine-grained access control
+  - `member` (database) → `member` (unified)
+  - `admin` (database) → `admin` (unified)
+  - Unauthenticated users → `guest` (unified)
+- **Purpose**: Authentication, quotas, UI display, route protection, and business logic
+- **Benefits**: Same role names everywhere - no mapping confusion!
 
 ### **Permission Matrix**
 
-| Application Role | View Photos | Upload Photos | Delete Own Photos | Moderate All | View Originals | Delete Any Photo |
-| ---------------- | ----------- | ------------- | ----------------- | ------------ | -------------- | ---------------- |
-| `viewer`         | ✅ Approved | ❌            | ❌                | ❌           | ❌             | ❌               |
-| `creator`        | ✅ Approved | ✅            | ✅                | ❌           | ❌             | ❌               |
-| `moderator`      | ✅ All      | ✅            | ✅                | ✅           | ✅             | ✅               |
+| Unified Role | View Photos | Upload Photos | Delete Own Photos | Moderate All | View Originals | Delete Any Photo |
+| ------------ | ----------- | ------------- | ----------------- | ------------ | -------------- | ---------------- |
+| `guest`      | ✅ Approved | ❌            | ❌                | ❌           | ❌             | ❌               |
+| `member`     | ✅ Approved | ✅            | ✅                | ❌           | ❌             | ❌               |
+| `admin`      | ✅ All      | ✅            | ✅                | ✅           | ✅             | ✅               |
 
 ### **Route Protection**
 
-- **`/`** (gallery): All roles (viewer sees approved, moderator sees all)
-- **`/upload`**: `creator` and `moderator` only
-- **`/me`**: `creator` and `moderator` only (own photos)
-- **`/moderate`**: `moderator` only
-- **`/mod/original/[id]`**: `moderator` only (view originals)
+- **`/`** (gallery): All roles (guest sees approved, admin sees all)
+- **`/upload`**: `member` and `admin` only
+- **`/me`**: `member` and `admin` only (own photos)
+- **`/moderate`**: `admin` only
+- **`/mod/original/[id]`**: `admin` only (view originals)
 
 ### **Implementation Details**
 
-- **Session storage**: Stores application role (`creator` or `moderator`) in signed cookie
-- **Role derivation**: `mapDbRoleToAppRole()` converts database role to application role
-- **Middleware**: Uses application roles for route protection
-- **UI display**: Shows application role in navigation header
+- **Session storage**: Stores unified role (`guest`, `member`, or `admin`) in signed cookie
+- **Role derivation**:
+  - Database → Unified: Direct mapping (`member` → `member`, `admin` → `admin`)
+  - Unauthenticated → Unified: `null` → `guest`
+- **Middleware**: Uses unified roles for route protection
+- **Quotas**: Uses unified roles directly (`guest`/`member`/`admin`)
+- **UI display**: Shows unified role in navigation header
+- **Zero mapping**: Same role names used everywhere - no confusion!
 
 ### **Database Schema**
 
@@ -300,14 +308,14 @@ The application uses a **two-layer role system** for maximum flexibility and dat
     - Magic-byte sniff (`sniffImage`) and dimension guard (`validateDimensions`)
     - Computes `pHash` (dHash) and returns `{ key, pHash }`
 - **Quotas & rate limits**
-  - `src/lib/quotas.ts`: simple per-role quotas (creator), usage based on counts for now.
+  - `src/lib/quotas.ts`: per-role quotas based on unified roles
   - `src/lib/rate/limiter.ts`: in-memory token bucket; also used by ingest.
-  - **Session roles**: `viewer` | `member` | `admin`
-  - **Quotas**: now read session roles directly (`viewer` | `member` | `admin`)
-    - `viewer`: no ingest/upload quota (blocked)
-    - `member`: standard quotas
-    - `admin`: elevated quotas
-  - **Gating**: `/upload` = `member` or `admin`; `/moderate` = `admin` only
+  - **Unified roles**: `guest` | `member` | `admin` (used directly by quotas)
+  - **Quota levels**:
+    - `guest`: no ingest/upload quota (blocked)
+    - `member`: standard quotas (2000 photos, 500MB/day, 60 ingests/min)
+    - `admin`: elevated quotas (100k photos, 1GB/day, 600 ingests/min)
+  - **Gating**: `/upload` = `member` or `admin` (unified roles); `/moderate` = `admin` only
 - **Dupes (stub)**
   - `src/lib/images/hash.ts` + `src/lib/images/dupes.ts` (Hamming check placeholder).
 
@@ -369,6 +377,41 @@ The application uses a **two-layer role system** for maximum flexibility and dat
 - Local cleanup in tests wipes `.data/`.
 
 ---
+
+## Recent Architecture Cleanup (2024-12-19)
+
+### **Role System Consolidation**
+
+- **Fixed**: Quotas now use session roles (`viewer`/`member`/`admin`) directly instead of application roles
+- **Clarified**: Three-layer role system with clear separation of concerns
+- **Removed**: Unnecessary role mapping functions that were causing confusion
+
+### **Filesystem Helper Consolidation**
+
+- **Consolidated**: Two separate path modules (`src/lib/paths.ts` and `src/lib/storage/paths.ts`) into one
+- **Moved**: All path utilities to `src/lib/storage/paths.ts` with backward compatibility aliases
+- **Removed**: Duplicate write/read functions from `src/lib/storage/fs.ts` (already in storage adapter)
+- **Updated**: All imports across codebase to use consolidated module
+
+### **Legacy Code Cleanup**
+
+- **Removed**: `src/lib/users.ts` file with unused legacy user types (`UserRole = 'user' | 'moderator'`)
+- **Verified**: No references to legacy file existed in codebase
+- **Result**: Cleaner codebase with only actively used `src/lib/users/dev.ts` module
+
+### **Unified Role System Benefits**
+
+- **Zero Mental Overhead**: Same role names (`guest`/`member`/`admin`) used everywhere
+- **No Mapping Confusion**: No need to remember `member` → `creator` or `admin` → `moderator`
+- **Simplified Code**: Direct role usage without conversion functions
+- **Better Developer Experience**: New contributors immediately understand the role system
+- **Consistent UI**: Role names in UI match backend logic exactly
+
+### **Other Benefits Achieved**
+
+- **Unified Storage Layer**: All filesystem operations go through storage port
+- **Cleaner Dependencies**: Removed redundant modules and consolidated related functionality
+- **Better Architecture**: Clear separation of concerns with unified naming
 
 ## Development Workflow
 

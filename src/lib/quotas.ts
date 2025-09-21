@@ -1,7 +1,7 @@
 import { getDb } from '@/src/lib/db';
 
-// Quotas now accept session roles directly
-export type SessionRole = 'viewer' | 'member' | 'admin';
+// Quotas work with session roles directly
+export type SessionRole = 'guest' | 'member' | 'admin';
 
 export type Quota = {
   maxPhotos: number;
@@ -23,9 +23,9 @@ export function getRoleQuota(role: SessionRole): Quota {
         maxBytesPerDay: 500_000_000,
         maxIngestsPerMinute: 60,
       };
-    case 'viewer':
+    case 'guest':
     default:
-      // viewers should not upload/ingest; give them effectively zero quota
+      // guests should not upload/ingest; give them effectively zero quota
       return { maxPhotos: 0, maxBytesPerDay: 0, maxIngestsPerMinute: 0 };
   }
 }

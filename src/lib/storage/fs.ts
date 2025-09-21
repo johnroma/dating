@@ -1,12 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { Readable } from 'node:stream';
 
-import { localStorageRoot, localOrigDir, localCdnDir } from '@/src/lib/paths';
+import {
+  localStorageRoot,
+  localOrigRoot,
+  localCdnRoot,
+} from '@/src/lib/storage/paths';
 
 export const ROOT = localStorageRoot();
-export const ORIG = localOrigDir();
-export const CDN = localCdnDir();
+export const ORIG = localOrigRoot();
+export const CDN = localCdnRoot();
 
 // (No filesystem side effects at module load.)
 
@@ -16,46 +19,6 @@ export function origPath(key: string): string {
 
 export function variantPath(photoId: string, size: 'sm' | 'md' | 'lg'): string {
   return path.join(CDN, photoId, `${size}.webp`);
-}
-
-export async function writeOriginal(key: string, buf: Buffer): Promise<void> {
-  try {
-    const abs = origPath(key);
-    const dir = path.dirname(abs);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    await fs.promises.writeFile(abs, buf);
-  } catch (error) {
-    throw new Error(
-      `Failed to write original file ${key}: ${error instanceof Error ? error.message : 'Unknown error'}`
-    );
-  }
-}
-
-export async function writeVariant(
-  photoId: string,
-  size: 'sm' | 'md' | 'lg',
-  buf: Buffer
-): Promise<void> {
-  try {
-    const abs = variantPath(photoId, size);
-    const dir = path.dirname(abs);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    await fs.promises.writeFile(abs, buf);
-  } catch (error) {
-    throw new Error(
-      `Failed to write variant ${photoId}/${size}: ${error instanceof Error ? error.message : 'Unknown error'}`
-    );
-  }
-}
-
-export function readStream(absPath: string): Readable {
-  try {
-    return fs.createReadStream(absPath);
-  } catch (error) {
-    throw new Error(
-      `Failed to create read stream for ${absPath}: ${error instanceof Error ? error.message : 'Unknown error'}`
-    );
-  }
 }
 
 export function exists(absPath: string): boolean {

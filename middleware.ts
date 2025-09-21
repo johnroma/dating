@@ -4,7 +4,7 @@ import type { NextRequest } from 'next/server';
 // Parse session cookies for both dev and Supabase auth
 function parseSessionCookie(
   req: NextRequest
-): { role: 'viewer' | 'member' | 'admin' } | null {
+): { role: 'guest' | 'member' | 'admin' } | null {
   // Check for dev session cookie first (only in development)
   if (process.env.NODE_ENV !== 'production') {
     const devSess = req.cookies.get('sess')?.value;
@@ -17,7 +17,7 @@ function parseSessionCookie(
           );
           if (
             json &&
-            (json.role === 'viewer' ||
+            (json.role === 'guest' ||
               json.role === 'member' ||
               json.role === 'admin')
           )

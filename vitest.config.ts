@@ -20,5 +20,23 @@ export default defineConfig({
     setupFiles: './vitest.setup.ts',
     pool: 'forks',
     maxWorkers: 1,
+    // Reduce verbosity by using default reporter with summary disabled
+    reporters: [
+      [
+        'default',
+        {
+          summary: false,
+        },
+      ],
+    ],
+    silent: false,
+    // Suppress stdout capture to reduce verbosity
+    onConsoleLog(log, type) {
+      // Suppress stdout output during tests to reduce verbosity
+      if (type === 'stdout') {
+        return false;
+      }
+      return true;
+    },
   },
 });

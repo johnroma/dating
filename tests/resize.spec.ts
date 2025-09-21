@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { makeVariants } from '../src/lib/images/resize';
-import { localStorageRoot } from '../src/lib/paths';
+import { localStorageRoot } from '../src/lib/storage/paths';
 import sharp from 'sharp';
 
 const TMP_DB = path.join(process.cwd(), '.data/db/test.db');

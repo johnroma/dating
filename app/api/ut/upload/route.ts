@@ -9,8 +9,8 @@ import { v4 as uuid } from 'uuid';
 import { validateDimensions } from '@/src/lib/images/guard';
 import { dHashHex } from '@/src/lib/images/hash';
 import { sniffImage } from '@/src/lib/images/sniff';
-import { isLocalDriver } from '@/src/lib/paths';
 import { ipFromHeaders, limit } from '@/src/lib/rate/limiter';
+import { isLocalDriver } from '@/src/lib/storage/paths';
 import { getStorage } from '@/src/ports/storage';
 import { getUploadCapabilities } from '@/src/ports/upload-policy';
 

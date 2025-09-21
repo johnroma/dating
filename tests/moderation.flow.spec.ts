@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { localOrigDir, localStorageRoot } from '../src/lib/paths';
+import { localOrigRoot, localStorageRoot } from '../src/lib/storage/paths';
 import { ensureLocalStorageDirs } from '../src/adapters/storage/local';
 
 const TMP_DB = path.join(process.cwd(), '.data/db/test.db');
@@ -56,7 +56,7 @@ describe('moderation flow', () => {
     );
     const upJson = await upRes.json();
     expect(upJson.key).toBeTruthy();
-    const origAbs = path.join(localOrigDir(), upJson.key);
+    const origAbs = path.join(localOrigRoot(), upJson.key);
     const origSize = fs.statSync(origAbs).size;
 
     const igRes = await ingest(

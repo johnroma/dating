@@ -1,8 +1,12 @@
 // Single source of truth for local storage paths (works locally and on Vercel).
 import path from 'node:path';
 
+export const isVercel = !!process.env.VERCEL;
+export const isLocalDriver =
+  (process.env.STORAGE_DRIVER ?? 'local').toLowerCase() === 'local';
+
 function writableRoot() {
-  return process.env.VERCEL ? '/tmp' : process.cwd();
+  return isVercel ? '/tmp' : process.cwd();
 }
 
 export function localStorageRoot() {
@@ -17,3 +21,7 @@ export function localOrigRoot() {
 export function localCdnRoot() {
   return path.join(localStorageRoot(), 'photos-cdn');
 }
+
+// Legacy aliases for backward compatibility
+export const localOrigDir = localOrigRoot;
+export const localCdnDir = localCdnRoot;

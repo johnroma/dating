@@ -39,11 +39,10 @@ export async function POST(req: Request) {
   // Determine actor role via session (session-only; no legacy role cookie)
   const db = getDb();
   const sess = await getSession().catch(() => null);
-  const session_role =
-    (sess?.role as 'viewer' | 'member' | 'admin') || 'viewer';
+  const session_role = (sess?.role as 'guest' | 'member' | 'admin') || 'guest';
 
-  // Block viewers from ingest entirely
-  if (session_role === 'viewer') {
+  // Block guests from ingest entirely
+  if (session_role === 'guest') {
     return NextResponse.json({ error: 'forbidden_role' }, { status: 403 });
   }
 
@@ -103,7 +102,7 @@ export async function POST(req: Request) {
     // ignore ingest key upsert errors
   }
 
-  // Quotas now accept session roles directly
+  // Quotas work with session roles directly
   const quota = getRoleQuota(session_role);
   const usage = await getUsage();
   try {
