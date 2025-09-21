@@ -30,7 +30,7 @@ function getJwks() {
   if (!cachedJwks) {
     // Only create JWKS if we have Supabase configuration
     // This prevents network calls during SQLite tests
-    if (process.env.SUPABASE_PROJECT_REF) {
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_PROJECT_REF) {
       cachedJwks = createRemoteJWKSet(jwksUrl());
     } else {
       // For SQLite tests, return null to avoid any network calls
