@@ -65,19 +65,12 @@ function decode(token: string | undefined | null): Session | null {
 export async function getSession(): Promise<Session | null> {
   // Always check both dev and Supabase sessions for consistency with middleware
   const devSession = await readDevSess();
-  if (devSession) {
-    console.log('Dev session found:', devSession);
-    return devSession;
-  }
+  if (devSession) return devSession;
 
   // Check for Supabase session
   const supabaseSession = await readSupabaseSession();
-  if (supabaseSession) {
-    console.log('Supabase session found:', supabaseSession);
-    return supabaseSession;
-  }
+  if (supabaseSession) return supabaseSession;
 
-  console.log('No session found');
   return null;
 }
 

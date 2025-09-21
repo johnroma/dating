@@ -66,19 +66,16 @@ export async function readSupabaseSession(): Promise<Session> {
   const token = pickAccessTokenCookie(map);
 
   if (!token) {
-    console.log('No Supabase token found');
     return null;
   }
 
   try {
     const jwks = getJwks();
     if (!jwks) {
-      console.log('No JWKS available');
       return null;
     }
 
     const iss = `https://${projectRef()}.supabase.co/auth/v1`;
-    console.log('Verifying JWT with issuer:', iss);
 
     const { payload } = await jwtVerify(token, jwks, {
       issuer: iss,
@@ -95,7 +92,7 @@ export async function readSupabaseSession(): Promise<Session> {
       return null;
     }
 
-    // Check if user exists in database, create account if they don't
+    // Now that JWT is verified, do database operations
     const hasDbAccount = await checkUserExistsInDatabase(userId);
 
     if (!hasDbAccount) {
@@ -110,10 +107,8 @@ export async function readSupabaseSession(): Promise<Session> {
     }
 
     const role = normalizeRole(email);
-    console.log('Supabase session created:', { userId, email, role });
     return { userId, email, role };
-  } catch (error) {
-    console.log('JWT verification failed:', error);
+  } catch {
     return null;
   }
 }
