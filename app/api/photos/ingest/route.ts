@@ -1,5 +1,6 @@
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const preferredRegion = 'arn1';
 
 import crypto from 'node:crypto';
 
@@ -62,12 +63,16 @@ export async function POST(req: Request) {
         const { upsertIngestKey } = await import(
           '@/src/lib/db/adapters/postgres'
         );
-        await upsertIngestKey(idem, existing.id);
+        if (upsertIngestKey) {
+          await upsertIngestKey(idem, existing.id);
+        }
       } else {
         const { upsertIngestKey } = await import(
           '@/src/lib/db/adapters/sqlite'
         );
-        upsertIngestKey(idem, existing.id);
+        if (upsertIngestKey) {
+          await upsertIngestKey(idem, existing.id);
+        }
       }
     } catch {
       // ignore ingest key upsert errors
@@ -126,6 +131,7 @@ export async function POST(req: Request) {
 
   const storage = await getStorage();
   const ownerId = sess?.userId ?? null;
+  const ownerEmail = sess?.email ?? null;
   const photoId = candidateId; // deterministic id for idempotency
 
   // Read original file via storage adapter (works for both local and R2)
@@ -174,18 +180,39 @@ export async function POST(req: Request) {
     lg: await storage.putVariant(photoId, 'lg', lgBuf),
   } as Record<string, string>;
 
-  await db.insertPhoto({
-    id: photoId,
-    status: 'APPROVED',
-    origkey: key,
-    sizesjson,
-    width,
-    height,
-    createdat: new Date().toISOString(),
-    phash: pHash || null,
-    duplicateof: null, // No longer needed since we prevent duplicates
-    ownerid: ownerId,
-  });
+  try {
+    await db.insertPhoto(
+      {
+        id: photoId,
+        status: 'APPROVED',
+        origkey: key,
+        sizesjson,
+        width,
+        height,
+        createdat: new Date().toISOString(),
+        phash: pHash || null,
+        duplicateof: null, // No longer needed since we prevent duplicates
+        ownerid: ownerId,
+      },
+      ownerEmail || undefined
+    );
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes('User account not found')
+    ) {
+      return NextResponse.json(
+        {
+          error: 'account_required',
+          message:
+            'Your account needs to be set up by an administrator before you can upload photos. Please contact support.',
+          userId: ownerId,
+        },
+        { status: 403 }
+      );
+    }
+    throw error; // Re-throw other errors
+  }
 
   // Audit
   try {

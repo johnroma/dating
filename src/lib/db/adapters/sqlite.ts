@@ -118,21 +118,31 @@ const stmtInsertAudit = conn.prepare(
 // Use shared mapping function
 const mapRow = mapRowToPhoto;
 
-export const insertPhoto: DbPort['insertPhoto'] = p => {
-  stmtInsert.run(
-    p.id,
-    p.status,
-    p.origkey,
-    JSON.stringify(p.sizesjson || {}),
-    p.width ?? null,
-    p.height ?? null,
-    p.createdat,
-    p.updatedat ?? p.createdat,
-    p.rejectionreason ?? null,
-    p.phash ?? null,
-    p.duplicateof ?? null,
-    p.ownerid ?? null
-  );
+export const insertPhoto: DbPort['insertPhoto'] = (p, _userEmail?: string) => {
+  try {
+    // SQLite doesn't have foreign key constraints for account table, so we can ignore userEmail
+    // For SQLite, we don't need to check or create accounts since there are no foreign key constraints
+    stmtInsert.run(
+      p.id,
+      p.status,
+      p.origkey,
+      JSON.stringify(p.sizesjson || {}),
+      p.width ?? null,
+      p.height ?? null,
+      p.createdat,
+      p.updatedat ?? p.createdat,
+      p.rejectionreason ?? null,
+      p.phash ?? null,
+      p.duplicateof ?? null,
+      p.ownerid ?? null
+    );
+  } catch (error) {
+    console.error('SQLite error in insertPhoto:', {
+      photoId: p.id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw error;
+  }
 };
 
 export const updatePhotoSizes: DbPort['updatePhotoSizes'] = (
@@ -141,36 +151,77 @@ export const updatePhotoSizes: DbPort['updatePhotoSizes'] = (
   width,
   height
 ) => {
-  stmtUpdateSizes.run(
-    JSON.stringify(sizesjson || {}),
-    width ?? null,
-    height ?? null,
-    new Date().toISOString(),
-    id
-  );
+  try {
+    stmtUpdateSizes.run(
+      JSON.stringify(sizesjson || {}),
+      width ?? null,
+      height ?? null,
+      new Date().toISOString(),
+      id
+    );
+  } catch (error) {
+    console.error('SQLite error in updatePhotoSizes:', {
+      photoId: id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw error;
+  }
 };
 
 export const setStatus: DbPort['setStatus'] = (id, status, extras) => {
-  const now = new Date().toISOString();
-  stmtSetStatus.run(status, extras?.rejectionreason ?? null, now, id);
+  try {
+    const now = new Date().toISOString();
+    stmtSetStatus.run(status, extras?.rejectionreason ?? null, now, id);
+  } catch (error) {
+    console.error('SQLite error in setStatus:', {
+      photoId: id,
+      status,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw error;
+  }
 };
 
 export const deletePhoto: DbPort['deletePhoto'] = id => {
-  stmtDelete.run(id);
+  try {
+    stmtDelete.run(id);
+  } catch (error) {
+    console.error('SQLite error in deletePhoto:', {
+      photoId: id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw error;
+  }
 };
 
 export const restorePhoto: NonNullable<DbPort['restorePhoto']> = id => {
-  const now = new Date().toISOString();
-  stmtRestore.run(now, id);
+  try {
+    const now = new Date().toISOString();
+    stmtRestore.run(now, id);
+  } catch (error) {
+    console.error('SQLite error in restorePhoto:', {
+      photoId: id,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    throw error;
+  }
 };
 
 export const getByOrigKey: DbPort['getByOrigKey'] = origkey => {
-  const row = stmtGetByOrig.get(origkey);
-  return mapRow(row);
+  try {
+    const row = stmtGetByOrig.get(origkey);
+    return mapRow(row);
+  } catch (error) {
+    console.error('SQLite error in getByOrigKey:', {
+      origKey: origkey,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return undefined;
+  }
 };
 
 // Step 7 helpers (not in DbPort on purpose; import directly when needed)
-export const upsertIngestKey = (
+export const upsertIngestKey: DbPort['upsertIngestKey'] = (
   id: string,
   photoid: string
 ): 'created' | 'exists' => {
@@ -178,6 +229,45 @@ export const upsertIngestKey = (
   if (row?.photoid) return 'exists';
   stmtUpsertIngestKey.run(id, photoid, new Date().toISOString());
   return 'created';
+};
+
+export const getIngestKey: DbPort['getIngestKey'] = id => {
+  const row = conn.prepare('SELECT * FROM ingestkeys WHERE id = ?').get(id) as
+    | { id: string; photoid: string; createdat: string }
+    | undefined;
+  return row;
+};
+
+export const deleteIngestKey: DbPort['deleteIngestKey'] = id => {
+  conn.prepare('DELETE FROM ingestkeys WHERE id = ?').run(id);
+};
+
+export const listAuditLog: DbPort['listAuditLog'] = photoId => {
+  const rows = conn
+    .prepare('SELECT * FROM auditlog WHERE photoid = ? ORDER BY at DESC')
+    .all(photoId) as Array<{
+    id: string;
+    photoid: string;
+    action: string;
+    actor: string;
+    reason: string | null;
+    at: string;
+  }>;
+  return rows;
+};
+
+export const addAuditLogEntry: DbPort['addAuditLogEntry'] = (
+  photoId,
+  action,
+  actor,
+  reason
+) => {
+  const id = `${photoId}-${Date.now()}`;
+  conn
+    .prepare(
+      'INSERT INTO auditlog (id, photoid, action, actor, reason, at) VALUES (?, ?, ?, ?, ?, ?)'
+    )
+    .run(id, photoId, action, actor, reason, new Date().toISOString());
 };
 
 export const insertAudit = (a: {
@@ -234,10 +324,66 @@ export const listApproved: DbPort['listApproved'] = (
 export const listPending: DbPort['listPending'] = (limit = 50, offset = 0) => {
   const rows = conn
     .prepare(
-      'SELECT * FROM photo WHERE status = ? ORDER BY createdat DESC LIMIT ? OFFSET ?'
+      'SELECT * FROM photo WHERE status = ? AND deletedat IS NULL ORDER BY createdat ASC LIMIT ? OFFSET ?'
     )
     .all('PENDING', limit, offset);
   return rows.map(mapRow).filter((p): p is Photo => p !== undefined);
+};
+
+export const listRejected: DbPort['listRejected'] = (
+  limit = 50,
+  offset = 0
+) => {
+  const rows = conn
+    .prepare(
+      'SELECT * FROM photo WHERE status = ? AND deletedat IS NULL ORDER BY createdat DESC LIMIT ? OFFSET ?'
+    )
+    .all('REJECTED', limit, offset);
+  return rows.map(mapRow).filter((p): p is Photo => p !== undefined);
+};
+
+export const listDeleted: DbPort['listDeleted'] = (limit = 50, offset = 0) => {
+  const rows = conn
+    .prepare(
+      'SELECT * FROM photo WHERE deletedat IS NOT NULL ORDER BY deletedat DESC LIMIT ? OFFSET ?'
+    )
+    .all(limit, offset);
+  return rows.map(mapRow).filter((p): p is Photo => p !== undefined);
+};
+
+export const listByStatus: DbPort['listByStatus'] = (
+  status,
+  limit = 50,
+  offset = 0
+) => {
+  const rows = conn
+    .prepare(
+      'SELECT * FROM photo WHERE status = ? ORDER BY createdat DESC LIMIT ? OFFSET ?'
+    )
+    .all(status, limit, offset);
+  return rows.map(mapRow).filter((p): p is Photo => p !== undefined);
+};
+
+export const getPhotosByIds: DbPort['getPhotosByIds'] = ids => {
+  if (ids.length === 0) return [];
+  const placeholders = ids.map(() => '?').join(',');
+  const rows = conn
+    .prepare(
+      sql`SELECT * FROM photo WHERE id IN (${placeholders}) ORDER BY createdat DESC`
+    )
+    .all(...ids);
+  return rows.map(mapRow).filter((p): p is Photo => p !== undefined);
+};
+
+export const bulkSetStatus: DbPort['bulkSetStatus'] = (ids, status, extras) => {
+  if (ids.length === 0) return;
+  const placeholders = ids.map(() => '?').join(',');
+  const now = new Date().toISOString();
+  conn
+    .prepare(
+      sql`UPDATE photo SET status = ?, rejectionreason = COALESCE(?, rejectionreason), updatedat = ? WHERE id IN (${placeholders})`
+    )
+    .run(status, extras?.rejectionreason ?? null, now, ...ids);
 };
 
 export const listRecent: DbPort['listRecent'] = (limit = 200, offset = 0) => {

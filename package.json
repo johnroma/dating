@@ -14,7 +14,6 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:migrate": "node -e \"console.log('SQLite/PG schema ensured on import (Step 7)')\"",
     "db:setup-postgres": "tsx scripts/setup-postgres.ts",
     "db:seed": "tsx src/lib/db/seed.ts",
     "db:open": "sqlite3 ${DATABASE_FILE:-.data/db/dev.db}",
@@ -27,15 +26,16 @@
     "@aws-sdk/s3-request-presigner": "^3.888.0",
     "dating": "link:",
     "dotenv": "^17.2.2",
+    "jose": "^5.2.4",
     "lightningcss": "^1.30.1",
     "mime": "^4.0.4",
     "next": "latest",
-    "npm-check-updates": "^18.1.1",
     "pg": "^8.16.3",
     "react": "latest",
     "react-dom": "latest",
     "sharp": "^0.34.3",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "zod": "^4.1.9"
   },
   "optionalDependencies": {
     "better-sqlite3": "^12.2.0"
@@ -54,7 +54,6 @@
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
     "@vitejs/plugin-react": "latest",
-    "autoprefixer": "latest",
     "eslint": "^9.0.0",
     "eslint-config-next": "latest",
     "eslint-config-prettier": "^10.1.8",
@@ -72,6 +71,7 @@
     "tailwindcss": "latest",
     "tsx": "latest",
     "typescript": "latest",
+    "vite": "^7.1.6",
     "vitest": "latest"
   },
   "packageManager": "pnpm@10.16.1+sha512.0e155aa2629db8672b49e8475da6226aa4bdea85fdcdfdc15350874946d4f3c91faaf64cbdc4a5d1ab8002f473d5c3fcedcd197989cf0390f9badd3c04678706",
@@ -83,7 +83,7 @@
     "ignoredBuiltDependencies": [
       "@tailwindcss/oxide",
       "esbuild",
-      "multiline-ts"
+      "unrs-resolver"
     ],
     "overrides": {
       "@img/sharp-libvips-darwin-arm64": "1.2.0"

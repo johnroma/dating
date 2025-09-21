@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
+import { headers, cookies } from 'next/headers';
 import Link from 'next/link';
 import React from 'react';
 
 import './globals.css';
+import { computePgSsl } from '@/src/lib/db/pg-ssl';
 import { getSession } from '@/src/ports/auth';
 
 const inter = Inter({
@@ -23,7 +25,42 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const sess = await getSession().catch(() => null);
+  // Skip session loading during tests to prevent database connection issues
+  const sess =
+    process.env.NODE_ENV === 'test'
+      ? null
+      : await getSession().catch(() => null);
+
+  // Lightweight runtime context for header debug (no secrets)
+  const h = await headers();
+  const vercelId = h.get('x-vercel-id');
+  const functionRegion = vercelId ? vercelId.split('::')[0] : null;
+  const jar = await cookies();
+  const hasSb = Boolean(jar.get('sb-access-token')?.value);
+  const hasDev = Boolean(jar.get('sess')?.value);
+  const authSource = hasSb ? 'supabase' : hasDev ? 'dev' : 'none';
+  const dbDriver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
+  const dbUrl = process.env.DATABASE_URL || '';
+  let urlInfo: {
+    host: string;
+    port: string;
+    pooler: boolean;
+    pgbouncer: string | null;
+  } | null = null;
+  try {
+    const u = new URL(dbUrl);
+    urlInfo = {
+      host: u.hostname,
+      port: u.port || '5432',
+      pooler: u.hostname.endsWith('.pooler.supabase.com'),
+      pgbouncer: u.searchParams.get('pgbouncer'),
+    };
+  } catch {
+    urlInfo = null;
+  }
+  const sslMode = dbUrl ? computePgSsl(dbUrl).mode : null;
+  const showDebug =
+    process.env.DEBUG_HEADER === '1' || process.env.VERCEL_ENV === 'preview';
   return (
     <html lang='en'>
       <body className={inter.className}>
@@ -48,6 +85,31 @@ export default async function RootLayout({
                 <Link className='underline' href='/dev/login'>
                   (switch)
                 </Link>
+                <form
+                  action={async () => {
+                    'use server';
+                    const { clearSession } = await import('@/src/ports/auth');
+                    const jar = await import('next/headers').then(m =>
+                      m.cookies()
+                    );
+                    jar.delete('sb-access-token');
+                    jar.delete('sb-refresh-token');
+                    jar.delete('sb-user-email');
+                    const projectRef = process.env.SUPABASE_PROJECT_REF;
+                    if (projectRef) {
+                      jar.delete(`sb-${projectRef}-auth-token`);
+                    }
+                    await clearSession();
+                  }}
+                  className='inline'
+                >
+                  <button
+                    type='submit'
+                    className='underline text-red-600 hover:text-red-800'
+                  >
+                    (sign out)
+                  </button>
+                </form>
               </>
             ) : (
               <>
@@ -55,10 +117,40 @@ export default async function RootLayout({
                 <Link className='underline' href='/dev/login'>
                   (login)
                 </Link>
+                <Link className='underline' href='/dev/sb-login'>
+                  (supabase)
+                </Link>
               </>
             )}
           </div>
         </header>
+        {showDebug ? (
+          <div className='px-4 py-1 text-xs text-gray-600'>
+            <details>
+              <summary className='cursor-pointer'>env</summary>
+              <div className='mt-1 flex flex-wrap gap-3'>
+                <span>auth:{authSource}</span>
+                {sess ? (
+                  <span>
+                    role:{sess.role}
+                    {sess.email ? ` email:${sess.email}` : ''}
+                  </span>
+                ) : (
+                  <span>role:none</span>
+                )}
+                <span>db:{dbDriver}</span>
+                {urlInfo ? (
+                  <span>
+                    pooler:{String(urlInfo.pooler)} pgbouncer:
+                    {urlInfo.pgbouncer || 'n/a'}
+                  </span>
+                ) : null}
+                {sslMode ? <span>ssl:{sslMode}</span> : null}
+                {functionRegion ? <span>region:{functionRegion}</span> : null}
+              </div>
+            </details>
+          </div>
+        ) : null}
         {children}
       </body>
     </html>

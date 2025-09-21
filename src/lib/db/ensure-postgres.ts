@@ -11,14 +11,11 @@ const connectionString = urlRaw
 const finalConnectionString =
   connectionString?.replace(/[?&]sslmode=require/, '') || connectionString;
 
-const noVerify =
-  process.env.PGSSL_NO_VERIFY === '1' ||
-  process.env.PG_SSL_NO_VERIFY === '1' ||
-  /\bsslmode=(?:require|allow|prefer|no-verify)\b/i.test(
-    finalConnectionString || ''
-  );
-
-const ssl = noVerify ? { rejectUnauthorized: false } : undefined;
+// Simple SSL configuration for Supabase (same as postgres.ts)
+const ssl = {
+  rejectUnauthorized: false, // Allow self-signed certificates
+  checkServerIdentity: () => undefined, // Skip hostname verification
+};
 
 const pool = new Pool({
   connectionString: finalConnectionString,

@@ -2,68 +2,44 @@ import { Pool } from 'pg';
 
 import { ensurePostgresSchema } from '../ensure-postgres';
 import type { DbPort } from '../port';
+import { getPgPool } from '../postgres';
 import type { Photo, PhotoStatus } from '../types';
 
-// Build connection string and SSL options from env
-const urlRaw = process.env.DATABASE_URL || '';
-const connectionString = urlRaw
-  ? urlRaw.replace(':6543/', ':5432/').replace('/postgrespostgres', '/postgres')
-  : urlRaw;
-
-// Remove sslmode=require from connection string as it forces strict validation
-// We'll handle SSL configuration through the ssl object instead
-let finalConnectionString =
-  connectionString?.replace(/[?&]sslmode=require/, '') || connectionString;
-
-// Force strict SSL validation for testing
-if (process.env.FORCE_STRICT_SSL) {
-  finalConnectionString =
-    finalConnectionString?.replace(/sslmode=require/, 'sslmode=verify-full') ||
-    '';
-  // Also try to force an SSL error by using invalid hostname
-  finalConnectionString =
-    finalConnectionString?.replace(/@[^:]+:/, '@invalid-ssl-host:') || '';
-}
-
-// Optional strict TLS: provide CA via env (multi-line PEM or base64)
-const ca =
-  process.env.PG_CA_CERT ||
-  (process.env.PG_CA_CERT_B64
-    ? Buffer.from(process.env.PG_CA_CERT_B64, 'base64').toString('utf8')
-    : undefined);
-
-// Pragmatic TLS: encrypt without CA verification (libpq sslmode=require style)
-// Accept both env spellings: PGSSL_NO_VERIFY and PG_SSL_NO_VERIFY
-const noVerify =
-  process.env.PGSSL_NO_VERIFY === '1' ||
-  process.env.PG_SSL_NO_VERIFY === '1' ||
-  /\bsslmode=(?:require|allow|prefer|no-verify)\b/i.test(
-    finalConnectionString || ''
-  );
-
-const ssl = ca
-  ? { ca, rejectUnauthorized: true }
-  : noVerify
-    ? { rejectUnauthorized: false }
-    : process.env.FORCE_STRICT_SSL
-      ? { rejectUnauthorized: true } // Force strict SSL for testing
-      : {
-          rejectUnauthorized: false,
-          checkServerIdentity: () => undefined, // Skip hostname verification
-        }; // Always use relaxed SSL validation for Supabase
-
-const pool = new Pool({
-  connectionString: finalConnectionString,
-  max: 10, // Maximum number of clients in the pool
-  idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-  connectionTimeoutMillis: 10000, // Return an error after 10 seconds if connection could not be established
-  ssl,
-});
-
-// Handle pool errors
+// Use the centralized pool configuration (SSL + pool settings) from src/lib/db/postgres.ts
+const pool: Pool = getPgPool();
 pool.on('error', () => {
-  // Silent error handling for production
+  // Silent in production; call sites log context on failures
 });
+
+// Retry once on pgbouncer session-mode terminations (XX000) or terminated connections.
+async function exec<T = Record<string, unknown>>(
+  sql: string,
+  params?: unknown[]
+): Promise<{ rows: T[] } & Record<string, unknown>> {
+  try {
+    return (await pool.query(sql, params as never)) as unknown as {
+      rows: T[];
+    } & Record<string, unknown>;
+  } catch (err) {
+    const e = err as { message?: string; code?: string };
+    const msg = String(e?.message || '');
+    const code = String(e?.code || '');
+    const isSessionModeMax = /MaxClientsInSessionMode/i.test(msg);
+    const isTerminated = code === 'XX000' || /terminat(ed|ion)/i.test(msg);
+    if (isSessionModeMax || isTerminated) {
+      try {
+        await pool.end();
+      } catch {
+        /* ignore */
+      }
+      const fresh = getPgPool();
+      return (await fresh.query(sql, params as never)) as unknown as {
+        rows: T[];
+      } & Record<string, unknown>;
+    }
+    throw err;
+  }
+}
 
 // Initialize schema on first connection
 let schemaEnsured = false;
@@ -107,7 +83,10 @@ function rowToPhoto(row: Record<string, unknown>): Photo {
   };
 }
 
-export const insertPhoto: DbPort['insertPhoto'] = async p => {
+export const insertPhoto: DbPort['insertPhoto'] = async (
+  p,
+  _userEmail?: string
+) => {
   await ensureSchema();
   await pool.query(
     'INSERT INTO photo (id, status, origkey, sizesjson, width, height, createdat, updatedat, rejectionreason, phash, duplicateof, ownerid) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',
@@ -195,65 +174,195 @@ export const restorePhoto: NonNullable<DbPort['restorePhoto']> = async id => {
 };
 
 export const getPhoto: DbPort['getPhoto'] = async id => {
-  await ensureSchema();
-  const { rows } = await pool.query('SELECT * FROM photo WHERE id = $1', [id]);
-  if (!rows[0]) return undefined;
-  return rowToPhoto(rows[0]);
+  try {
+    await ensureSchema();
+    const queryPromise = pool.query('SELECT * FROM photo WHERE id = $1', [id]);
+
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Query timeout')), 3000);
+    });
+
+    const { rows } = (await Promise.race([queryPromise, timeoutPromise])) as {
+      rows: Array<{
+        id: string;
+        status: string;
+        origkey: string;
+        sizesjson: string;
+        width: number | null;
+        height: number | null;
+        createdat: string;
+        updatedat: string;
+        rejectionreason: string | null;
+        phash: string | null;
+        duplicateof: string | null;
+        ownerid: string | null;
+      }>;
+    };
+    if (!rows[0]) return undefined;
+    return rowToPhoto(rows[0]);
+  } catch (error) {
+    console.error('Database error in getPhoto:', error);
+    return undefined; // Return undefined instead of crashing
+  }
 };
 
 export const getByOrigKey: DbPort['getByOrigKey'] = async origkey => {
-  // Schema already exists
-  const { rows } = await pool.query(
-    'SELECT * FROM photo WHERE origkey = $1 LIMIT 1',
-    [origkey]
-  );
-  if (!rows[0]) return undefined;
-  return rowToPhoto(rows[0]);
+  try {
+    // Schema already exists
+    const queryPromise = pool.query(
+      'SELECT * FROM photo WHERE origkey = $1 LIMIT 1',
+      [origkey]
+    );
+
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Query timeout')), 3000);
+    });
+
+    const { rows } = (await Promise.race([queryPromise, timeoutPromise])) as {
+      rows: Array<{
+        id: string;
+        status: string;
+        origkey: string;
+        sizesjson: string;
+        width: number | null;
+        height: number | null;
+        createdat: string;
+        updatedat: string;
+        rejectionreason: string | null;
+        phash: string | null;
+        duplicateof: string | null;
+        ownerid: string | null;
+      }>;
+    };
+    if (!rows[0]) return undefined;
+    return rowToPhoto(rows[0]);
+  } catch (error) {
+    console.error('Database error in getByOrigKey:', error);
+    return undefined; // Return undefined instead of crashing
+  }
 };
 
 export const listApproved: DbPort['listApproved'] = async (
   limit = 50,
   offset = 0
 ) => {
-  await ensureSchema();
-  const { rows } = await pool.query(
-    'SELECT * FROM photo WHERE status = $1 AND deletedat IS NULL ORDER BY createdat DESC LIMIT $2 OFFSET $3',
-    ['APPROVED', limit, offset]
-  );
-  return rows.map(rowToPhoto);
+  try {
+    await ensureSchema();
+    const { rows } = (await Promise.race([
+      exec(
+        'SELECT * FROM photo WHERE status = $1 AND deletedat IS NULL ORDER BY createdat DESC LIMIT $2 OFFSET $3',
+        ['APPROVED', limit, offset]
+      ),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Query timeout')), 3000)
+      ),
+    ])) as {
+      rows: Array<{
+        id: string;
+        status: string;
+        origkey: string;
+        sizesjson: string;
+        width: number | null;
+        height: number | null;
+        createdat: string;
+        updatedat: string;
+        rejectionreason: string | null;
+        phash: string | null;
+        duplicateof: string | null;
+        ownerid: string | null;
+      }>;
+    };
+    return rows.map(rowToPhoto);
+  } catch (error) {
+    console.error('Database error in listApproved:', error);
+    // Return empty array instead of crashing
+    return [];
+  }
 };
 
 export const listPending: DbPort['listPending'] = async (
   limit = 50,
   offset = 0
 ) => {
-  // Schema already exists
-  const { rows } = await pool.query(
-    'SELECT * FROM photo WHERE status = $1 ORDER BY createdat DESC LIMIT $2 OFFSET $3',
-    ['PENDING', limit, offset]
-  );
-  return rows.map(rowToPhoto);
+  try {
+    // Schema already exists
+    const { rows } = (await Promise.race([
+      pool.query(
+        'SELECT * FROM photo WHERE status = $1 ORDER BY createdat DESC LIMIT $2 OFFSET $3',
+        ['PENDING', limit, offset]
+      ),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Query timeout')), 3000)
+      ),
+    ])) as {
+      rows: Array<{
+        id: string;
+        status: string;
+        origkey: string;
+        sizesjson: string;
+        width: number | null;
+        height: number | null;
+        createdat: string;
+        updatedat: string;
+        rejectionreason: string | null;
+        phash: string | null;
+        duplicateof: string | null;
+        ownerid: string | null;
+      }>;
+    };
+    return rows.map(rowToPhoto);
+  } catch (error) {
+    console.error('Database error in listPending:', error);
+    // Return empty array instead of crashing
+    return [];
+  }
 };
 
 export const listRecent: DbPort['listRecent'] = async (
   limit = 200,
   offset = 0
 ) => {
-  await ensureSchema();
-  const { rows } = await pool.query(
-    'SELECT * FROM photo WHERE deletedat IS NULL ORDER BY createdat DESC LIMIT $1 OFFSET $2',
-    [limit, offset]
-  );
-  return rows.map(rowToPhoto);
+  try {
+    await ensureSchema();
+    const { rows } = (await Promise.race([
+      exec(
+        'SELECT * FROM photo WHERE deletedat IS NULL ORDER BY createdat DESC LIMIT $1 OFFSET $2',
+        [limit, offset]
+      ),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Query timeout')), 3000)
+      ),
+    ])) as {
+      rows: Array<{
+        id: string;
+        status: string;
+        origkey: string;
+        sizesjson: string;
+        width: number | null;
+        height: number | null;
+        createdat: string;
+        updatedat: string;
+        rejectionreason: string | null;
+        phash: string | null;
+        duplicateof: string | null;
+        ownerid: string | null;
+      }>;
+    };
+    return rows.map(rowToPhoto);
+  } catch (error) {
+    console.error('Database error in listRecent:', error);
+    // Return empty array instead of crashing
+    return [];
+  }
 };
 
 export const countApproved: DbPort['countApproved'] = async () => {
   // Schema already exists
-  const { rows } = await pool.query(
+  const { rows } = await exec(
     'SELECT COUNT(*)::int as c FROM photo WHERE status = $1',
     ['APPROVED']
   );
-  return Number(rows[0]?.c ?? 0);
+  return Number((rows[0] as Record<string, unknown>)?.['c'] ?? 0);
 };
 
 // Step 7 helpers (not in DbPort on purpose; import directly where needed)
@@ -262,7 +371,7 @@ export async function upsertIngestKey(
   photoid: string
 ): Promise<'created' | 'exists'> {
   // Schema already exists
-  const r = await pool.query(
+  const r = await exec(
     'INSERT INTO ingestkeys(id, photoid, createdat) VALUES($1,$2, now()) ON CONFLICT(id) DO NOTHING RETURNING photoid',
     [id, photoid]
   );
@@ -278,7 +387,7 @@ export async function insertAudit(a: {
   at: string;
 }) {
   // Schema already exists
-  await pool.query(
+  await exec(
     'INSERT INTO auditlog(id, photoid, action, actor, reason, at) VALUES ($1,$2,$3,$4,$5,$6)',
     [a.id, a.photoid, a.action, a.actor, a.reason ?? null, a.at]
   );
@@ -293,17 +402,24 @@ export async function listMembers(): Promise<
   }[]
 > {
   try {
-    const res = await pool.query(
-      'SELECT id, displayname, role FROM account WHERE deletedat IS NULL ORDER BY role DESC, displayname ASC'
-    );
+    const res = (await Promise.race([
+      exec(
+        'SELECT id, displayname, role FROM account WHERE deletedat IS NULL ORDER BY role DESC, displayname ASC'
+      ),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Query timeout')), 3000)
+      ),
+    ])) as {
+      rows: Array<{ id: string; displayname: string; role: string }>;
+    };
     return (res?.rows || []).map(row => ({
       id: String(row.id),
-      displayName: String(
-        row.displayname ?? row.displayName ?? row.display_name ?? ''
-      ),
+      displayName: String(row.displayname ?? ''),
       role: row.role as 'member' | 'admin',
     }));
-  } catch {
+  } catch (error) {
+    console.error('Database error in listMembers:', error);
+    // Return empty array instead of crashing
     return [];
   }
 }
@@ -311,7 +427,7 @@ export async function listMembers(): Promise<
 // Owner-scoped listing
 export async function listPhotosByOwner(ownerId: string): Promise<Photo[]> {
   await ensureSchema();
-  const { rows } = await pool.query(
+  const { rows } = await exec(
     'SELECT * FROM photo WHERE ownerid = $1 AND deletedat IS NULL ORDER BY createdat DESC',
     [ownerId]
   );

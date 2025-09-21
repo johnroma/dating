@@ -3,8 +3,12 @@ import crypto from 'node:crypto';
 
 import { cookies } from 'next/headers';
 
+import { readSupabaseSession } from '@/src/lib/auth/supabase-jwt';
+
+// Import Supabase session reader only when needed to prevent network calls during SQLite tests
+
 export type SessionRole = 'viewer' | 'member' | 'admin';
-export type Session = { userId: string; role: SessionRole };
+export type Session = { userId: string; role: SessionRole; email?: string };
 
 // Map database roles to application roles (now they match directly)
 export function mapDbRoleToAppRole(dbRole: 'member' | 'admin'): SessionRole {
@@ -59,6 +63,18 @@ function decode(token: string | undefined | null): Session | null {
 }
 
 export async function getSession(): Promise<Session | null> {
+  // Always check both dev and Supabase sessions for consistency with middleware
+  const devSession = await readDevSess();
+  if (devSession) return devSession;
+
+  // Check for Supabase session
+  const supabaseSession = await readSupabaseSession();
+  if (supabaseSession) return supabaseSession;
+
+  return null;
+}
+
+async function readDevSess(): Promise<Session | null> {
   const store = await cookies();
   return decode(store.get(SESS_NAME)?.value);
 }

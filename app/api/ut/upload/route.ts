@@ -83,11 +83,18 @@ export async function POST(req: Request) {
   const key = `${uuid()}.${ext}`;
 
   // save original using storage adapter (works with both local and R2)
-  const storage = await getStorage();
-  await storage.putOriginal(key, buf);
+  try {
+    const storage = await getStorage();
+    await storage.putOriginal(key, buf);
 
-  // compute perceptual hash for duplicate detection
-  const pHash = await dHashHex(buf);
+    // compute perceptual hash for duplicate detection
+    const pHash = await dHashHex(buf);
 
-  return NextResponse.json({ key, pHash });
+    return NextResponse.json({ key, pHash });
+  } catch {
+    return NextResponse.json(
+      { error: 'storage_failed', message: 'Failed to save file' },
+      { status: 500 }
+    );
+  }
 }
