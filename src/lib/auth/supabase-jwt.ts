@@ -26,15 +26,19 @@ function jwksUrl(): URL {
 
 let cachedJwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 
+function hasSupabaseAuthConfig(): boolean {
+  // JWKS fetch requires either an explicit JWKS URL or a project ref; SUPABASE_URL is not required
+  return Boolean(
+    process.env.SUPABASE_JWKS_URL || process.env.SUPABASE_PROJECT_REF
+  );
+}
+
 function getJwks() {
   if (!cachedJwks) {
-    // Only create JWKS if we have Supabase configuration
-    // This prevents network calls during SQLite tests
-    if (process.env.SUPABASE_URL && process.env.SUPABASE_PROJECT_REF) {
+    // Avoid network calls in environments without Supabase config (e.g., tests/SQLite)
+    if (hasSupabaseAuthConfig()) {
       cachedJwks = createRemoteJWKSet(jwksUrl());
     } else {
-      // For SQLite tests, return null to avoid any network calls
-      // The readSupabaseSession function will handle this gracefully
       cachedJwks = null as unknown as ReturnType<typeof createRemoteJWKSet>;
     }
   }

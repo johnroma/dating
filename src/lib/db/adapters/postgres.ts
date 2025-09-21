@@ -11,6 +11,36 @@ pool.on('error', () => {
   // Silent in production; call sites log context on failures
 });
 
+// Retry once on pgbouncer session-mode terminations (XX000) or terminated connections.
+async function exec<T = Record<string, unknown>>(
+  sql: string,
+  params?: unknown[]
+): Promise<{ rows: T[] } & Record<string, unknown>> {
+  try {
+    return (await pool.query(sql, params as never)) as unknown as {
+      rows: T[];
+    } & Record<string, unknown>;
+  } catch (err) {
+    const e = err as { message?: string; code?: string };
+    const msg = String(e?.message || '');
+    const code = String(e?.code || '');
+    const isSessionModeMax = /MaxClientsInSessionMode/i.test(msg);
+    const isTerminated = code === 'XX000' || /terminat(ed|ion)/i.test(msg);
+    if (isSessionModeMax || isTerminated) {
+      try {
+        await pool.end();
+      } catch {
+        /* ignore */
+      }
+      const fresh = getPgPool();
+      return (await fresh.query(sql, params as never)) as unknown as {
+        rows: T[];
+      } & Record<string, unknown>;
+    }
+    throw err;
+  }
+}
+
 // Initialize schema on first connection
 let schemaEnsured = false;
 async function ensureSchema() {
@@ -219,7 +249,7 @@ export const listApproved: DbPort['listApproved'] = async (
   try {
     await ensureSchema();
     const { rows } = (await Promise.race([
-      pool.query(
+      exec(
         'SELECT * FROM photo WHERE status = $1 AND deletedat IS NULL ORDER BY createdat DESC LIMIT $2 OFFSET $3',
         ['APPROVED', limit, offset]
       ),
@@ -295,7 +325,7 @@ export const listRecent: DbPort['listRecent'] = async (
   try {
     await ensureSchema();
     const { rows } = (await Promise.race([
-      pool.query(
+      exec(
         'SELECT * FROM photo WHERE deletedat IS NULL ORDER BY createdat DESC LIMIT $1 OFFSET $2',
         [limit, offset]
       ),
@@ -328,11 +358,11 @@ export const listRecent: DbPort['listRecent'] = async (
 
 export const countApproved: DbPort['countApproved'] = async () => {
   // Schema already exists
-  const { rows } = await pool.query(
+  const { rows } = await exec(
     'SELECT COUNT(*)::int as c FROM photo WHERE status = $1',
     ['APPROVED']
   );
-  return Number(rows[0]?.c ?? 0);
+  return Number((rows[0] as Record<string, unknown>)?.['c'] ?? 0);
 };
 
 // Step 7 helpers (not in DbPort on purpose; import directly where needed)
@@ -341,7 +371,7 @@ export async function upsertIngestKey(
   photoid: string
 ): Promise<'created' | 'exists'> {
   // Schema already exists
-  const r = await pool.query(
+  const r = await exec(
     'INSERT INTO ingestkeys(id, photoid, createdat) VALUES($1,$2, now()) ON CONFLICT(id) DO NOTHING RETURNING photoid',
     [id, photoid]
   );
@@ -357,7 +387,7 @@ export async function insertAudit(a: {
   at: string;
 }) {
   // Schema already exists
-  await pool.query(
+  await exec(
     'INSERT INTO auditlog(id, photoid, action, actor, reason, at) VALUES ($1,$2,$3,$4,$5,$6)',
     [a.id, a.photoid, a.action, a.actor, a.reason ?? null, a.at]
   );
@@ -373,20 +403,20 @@ export async function listMembers(): Promise<
 > {
   try {
     const res = (await Promise.race([
-      pool.query(
+      exec(
         'SELECT id, displayname, role FROM account WHERE deletedat IS NULL ORDER BY role DESC, displayname ASC'
       ),
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Query timeout')), 3000)
       ),
-    ])) as { rows: Array<{ id: string; displayname: string; role: string }> };
-    return (res?.rows || []).map(
-      (row: { id: string; displayname: string; role: string }) => ({
-        id: String(row.id),
-        displayName: String(row.displayname ?? ''),
-        role: row.role as 'member' | 'admin',
-      })
-    );
+    ])) as {
+      rows: Array<{ id: string; displayname: string; role: string }>;
+    };
+    return (res?.rows || []).map(row => ({
+      id: String(row.id),
+      displayName: String(row.displayname ?? ''),
+      role: row.role as 'member' | 'admin',
+    }));
   } catch (error) {
     console.error('Database error in listMembers:', error);
     // Return empty array instead of crashing
@@ -397,7 +427,7 @@ export async function listMembers(): Promise<
 // Owner-scoped listing
 export async function listPhotosByOwner(ownerId: string): Promise<Photo[]> {
   await ensureSchema();
-  const { rows } = await pool.query(
+  const { rows } = await exec(
     'SELECT * FROM photo WHERE ownerid = $1 AND deletedat IS NULL ORDER BY createdat DESC',
     [ownerId]
   );
