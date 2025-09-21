@@ -2,37 +2,13 @@ import { Pool } from 'pg';
 
 import { ensurePostgresSchema } from '../ensure-postgres';
 import type { DbPort } from '../port';
+import { getPgPool } from '../postgres';
 import type { Photo, PhotoStatus } from '../types';
 
-// Build connection string and SSL options from env
-const urlRaw = process.env.DATABASE_URL || '';
-const connectionString = urlRaw
-  ? urlRaw.replace(':6543/', ':5432/').replace('/postgrespostgres', '/postgres')
-  : urlRaw;
-
-// Remove sslmode=require from connection string as it forces strict validation
-// We'll handle SSL configuration through the ssl object instead
-const finalConnectionString =
-  connectionString?.replace(/[?&]sslmode=require/, '') || connectionString;
-
-// Simple SSL configuration for Supabase
-// Supabase requires SSL but with relaxed certificate validation
-const ssl = {
-  rejectUnauthorized: false, // Allow self-signed certificates
-  checkServerIdentity: () => undefined, // Skip hostname verification
-};
-
-const pool = new Pool({
-  connectionString: finalConnectionString,
-  max: 5, // Reduced pool size for better stability
-  idleTimeoutMillis: 60000, // Keep connections alive longer
-  connectionTimeoutMillis: 5000, // Faster connection timeout
-  ssl,
-});
-
-// Handle pool errors
+// Use the centralized pool configuration (SSL + pool settings) from src/lib/db/postgres.ts
+const pool: Pool = getPgPool();
 pool.on('error', () => {
-  // Silent error handling for production
+  // Silent in production; call sites log context on failures
 });
 
 // Initialize schema on first connection
