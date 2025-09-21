@@ -11,7 +11,8 @@ import { approvePhoto, rejectPhoto, restorePhoto } from '../mod/actions';
 
 export default async function ModeratePage() {
   const db = getDb();
-  const items = await db.listRecent(200, 0);
+  // Smaller batch for faster first paint; paginate later if needed
+  const items = await db.listRecent(60, 0);
 
   return (
     <main className='mx-auto max-w-5xl p-6'>
@@ -37,6 +38,7 @@ export default async function ModeratePage() {
                 src={p.sizesjson?.md || p.sizesjson?.sm}
                 alt={p.id}
                 className='h-48 w-full object-cover'
+                loading='lazy'
               />
             </div>
             <div className='space-y-2'>

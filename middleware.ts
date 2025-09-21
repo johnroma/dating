@@ -27,88 +27,52 @@ function parseSessionCookie(
     }
   }
 
-  const adminEmails =
-    process.env.SUPABASE_ADMIN_EMAILS?.split(',')
-      .map(email => email.trim().toLowerCase())
-      .filter(Boolean) || [];
-
   // Check for Supabase session cookies
   const supabaseToken = req.cookies.get('sb-access-token')?.value;
-  const supabaseEmailCookie =
-    req.cookies.get('sb-user-email')?.value?.toLowerCase() || null;
-
   if (supabaseToken) {
     // For Supabase, we need to do a quick JWT decode without verification
     // This is not ideal but necessary for edge middleware
     try {
-      const [, payload] = supabaseToken.split('.');
-      if (payload) {
+      const [header, payload] = supabaseToken.split('.');
+      if (header && payload) {
         const decoded = JSON.parse(
           Buffer.from(payload, 'base64url').toString('utf8')
         );
-        const tokenEmail = (decoded.email || decoded.user_metadata?.email || '')
-          .toString()
-          .toLowerCase();
-        const email = tokenEmail || supabaseEmailCookie;
+        const email = decoded.email || decoded.user_metadata?.email;
 
+        // For security, we can't check the database in edge middleware
+        // So we'll be more restrictive - only allow if we're not using PostgreSQL
+        // or if we're in development mode
         if (
           process.env.DB_DRIVER?.toLowerCase() === 'postgres' &&
           process.env.NODE_ENV === 'production'
         ) {
-          // In production with PostgreSQL we can't hit the database from middleware;
-          // fall back to cookie-based role mapping.
-          if (email && adminEmails.includes(email)) {
-            return { role: 'admin' };
-          }
+          // In production with PostgreSQL, we can't verify database accounts in middleware
+          // So we'll deny access and let the server-side validation handle it
           return null;
         }
 
-        if (email && adminEmails.includes(email)) {
+        // Check if email is in admin list
+        const adminEmails =
+          process.env.SUPABASE_ADMIN_EMAILS?.split(',').map(s =>
+            s.trim().toLowerCase()
+          ) || [];
+        if (email && adminEmails.includes(email.toLowerCase())) {
           return { role: 'admin' };
         }
 
-        if (email) {
-          return { role: 'member' };
-        }
+        // Default to member for Supabase users (only in development or SQLite)
+        return { role: 'member' };
       }
     } catch {
       // Ignore JWT parsing errors
     }
   }
 
-  if (supabaseEmailCookie) {
-    if (adminEmails.includes(supabaseEmailCookie)) {
-      return { role: 'admin' };
-    }
-    return { role: 'member' };
-  }
-
   return null;
 }
 
 export function middleware(req: NextRequest) {
-  // Diagnostic: log OPTIONS requests that may be causing 400s on Vercel
-  if (req.method === 'OPTIONS') {
-    try {
-      const id =
-        req.headers.get('x-vercel-id') || req.headers.get('x-request-id');
-      const acrm = req.headers.get('access-control-request-method');
-      const acrh = req.headers.get('access-control-request-headers');
-      const origin = req.headers.get('origin');
-      const host = req.headers.get('host');
-      // eslint-disable-next-line no-console
-      console.warn('Preflight OPTIONS observed', {
-        path: req.nextUrl.pathname,
-        host,
-        origin,
-        acrm,
-        acrh,
-        requestId: id || undefined,
-      });
-    } catch {
-      // ignore logging errors
-    }
-  }
   const { pathname } = req.nextUrl;
   const sess = parseSessionCookie(req);
 
@@ -152,7 +116,7 @@ export function middleware(req: NextRequest) {
     if (sess?.role === 'member' || sess?.role === 'admin')
       return NextResponse.next();
     const url = req.nextUrl.clone();
-    url.pathname = '/dev/sb-login';
+    url.pathname = '/dev/login';
     url.searchParams.set('from', pathname);
     return NextResponse.redirect(url);
   }
