@@ -1,13 +1,12 @@
+import Link from 'next/link';
+
+import { approvePhoto, rejectPhoto, restorePhoto } from '@/app/mod/actions';
+import { getDb } from '@/src/lib/db';
+
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'force-no-store';
 export const runtime = 'nodejs';
-
-import Link from 'next/link';
-
-import { getDb } from '@/src/lib/db';
-
-import { approvePhoto, rejectPhoto, restorePhoto } from '../mod/actions';
 
 export default async function ModeratePage() {
   const db = getDb();
@@ -35,7 +34,7 @@ export default async function ModeratePage() {
             <div className='mb-2 overflow-hidden rounded'>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={p.sizesjson?.md || p.sizesjson?.sm}
+                src={p.sizesjson.md || p.sizesjson.sm}
                 alt={p.id}
                 className='h-48 w-full object-cover'
                 loading='lazy'
@@ -74,7 +73,7 @@ export default async function ModeratePage() {
                   name='reason'
                   placeholder='Rejection reason (optional)'
                   className='w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500'
-                  defaultValue={p.rejectionreason || ''}
+                  defaultValue={p.rejectionreason ?? ''}
                 />
                 <button
                   type='submit'

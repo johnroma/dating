@@ -1,9 +1,8 @@
 // Step 2: Dev login page. Pick between member and admin.
 import { cookies } from 'next/headers';
 
+import { signInAction, signOutAction } from '@/app/dev/login/actions';
 import { getDevUsers } from '@/src/lib/users/dev';
-
-import { signInAction, signOutAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +16,7 @@ export default async function Page({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const sp = await searchParams;
-  const from = typeof sp?.from === 'string' ? sp.from : '/';
+  const from = typeof sp.from === 'string' ? sp.from : '/';
   const users = await getUsers();
   const store = await cookies();
   const me = store.get('sess')?.value ? true : false;

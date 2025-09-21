@@ -21,7 +21,8 @@ export function ensureLocalhostDnsResolution() {
       err: ErrnoException | null,
       address: string,
       family: number
-    ) => void
+    ) => void,
+    ...args: unknown[]
   ) {
     if (hostname === 'localhost') {
       let family = 4;
@@ -31,7 +32,7 @@ export function ensureLocalhostDnsResolution() {
         cb = options;
       } else if (typeof options === 'number') {
         family = options === 6 ? 6 : 4;
-      } else if (typeof options === 'object' && options !== null) {
+      } else if (typeof options === 'object') {
         const candidate = Reflect.get(options, 'family');
         family = candidate === 6 ? 6 : 4;
       }
@@ -42,38 +43,35 @@ export function ensureLocalhostDnsResolution() {
       return;
     }
 
-    return originalLookup.apply(
-      this,
-      arguments as unknown as Parameters<typeof dns.lookup>
-    );
+    return originalLookup.apply(this, [
+      hostname,
+      options,
+      callback,
+      ...args,
+    ] as unknown as Parameters<typeof dns.lookup>);
   };
 
-  if (dns.promises?.lookup) {
-    const originalPromisedLookup = dns.promises.lookup.bind(dns.promises);
-    dns.promises.lookup = (async (hostname: string, options?: unknown) => {
-      if (hostname === 'localhost') {
-        let family = 4;
-        if (typeof options === 'number') {
-          family = options === 6 ? 6 : 4;
-        } else if (
-          typeof options === 'object' &&
-          options !== null &&
-          'family' in options
-        ) {
-          const candidate = Reflect.get(
-            options as { family?: number },
-            'family'
-          );
-          family = candidate === 6 ? 6 : 4;
-        }
-
-        const address = family === 6 ? '::1' : '127.0.0.1';
-        return { address, family };
+  const originalPromisedLookup = dns.promises.lookup.bind(dns.promises);
+  dns.promises.lookup = (async (hostname: string, options?: unknown) => {
+    if (hostname === 'localhost') {
+      let family = 4;
+      if (typeof options === 'number') {
+        family = options === 6 ? 6 : 4;
+      } else if (
+        typeof options === 'object' &&
+        options !== null &&
+        'family' in options
+      ) {
+        const candidate = Reflect.get(options as { family?: number }, 'family');
+        family = candidate === 6 ? 6 : 4;
       }
 
-      return originalPromisedLookup(hostname, options as never);
-    }) as typeof dns.promises.lookup;
-  }
+      const address = family === 6 ? '::1' : '127.0.0.1';
+      return { address, family };
+    }
+
+    return originalPromisedLookup(hostname, options as never);
+  }) as typeof dns.promises.lookup;
 }
 
 ensureLocalhostDnsResolution();

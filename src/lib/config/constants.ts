@@ -177,5 +177,5 @@ export function getDevLoginUrl(from?: string): string {
 }
 
 export function getRedirectUrl(from?: string): string {
-  return from || ROUTES.HOME;
+  return from ?? ROUTES.HOME;
 }

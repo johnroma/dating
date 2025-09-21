@@ -17,7 +17,7 @@ export function mapDbRoleToAppRole(dbRole: 'member' | 'admin'): SessionRole {
 
 const SESS_NAME = 'sess';
 const SECRET =
-  process.env.DEV_SESSION_SECRET || 'dev-only-secret-please-change';
+  process.env.DEV_SESSION_SECRET ?? 'dev-only-secret-please-change';
 const MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 
 function b64url(input: Buffer | string) {

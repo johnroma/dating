@@ -1,9 +1,9 @@
-export const runtime = 'nodejs';
-
 import { NextResponse } from 'next/server';
 import { Client } from 'pg';
 
 import { computePgSsl } from '@/src/lib/db/pg-ssl';
+
+export const runtime = 'nodejs';
 
 type ConnectionConfig = {
   host?: string;
@@ -28,7 +28,7 @@ function parseConnectionString(connectionString: string): ConnectionConfig {
 // legacy helper removed; computePgSsl is the single source of truth
 
 export async function GET(req: Request) {
-  const cs = process.env.DATABASE_URL || '';
+  const cs = process.env.DATABASE_URL ?? '';
   if (!cs) {
     return NextResponse.json(
       { error: 'Missing DATABASE_URL' },
@@ -41,12 +41,12 @@ export async function GET(req: Request) {
   const { ssl, mode } = computePgSsl(cs);
   const meta = {
     rejectUnauthorized:
-      typeof ssl === 'object' ? ssl?.rejectUnauthorized !== false : true,
+      typeof ssl === 'object' ? ssl.rejectUnauthorized !== false : true,
     ca: typeof ssl === 'object' ? Boolean((ssl as { ca?: string }).ca) : false,
   } as const;
 
   const client = new Client({
-    host: conn.host || conn.hostname,
+    host: conn.host ?? conn.hostname,
     port: conn.port ? Number(conn.port) : 5432,
     user: conn.user,
     password: conn.password,
@@ -65,7 +65,7 @@ export async function GET(req: Request) {
     tConnect = Date.now() - t0;
     const r = await client.query('select 1 as ok');
     tQuery = Date.now() - (t0 + tConnect);
-    ok = r.rows?.[0]?.ok === 1;
+    ok = r.rows[0].ok === 1;
   } catch (e: unknown) {
     err = e instanceof Error ? e.message : String(e);
   } finally {
@@ -85,8 +85,8 @@ export async function GET(req: Request) {
         port: u.port || '5432',
         database: u.pathname.replace(/^\//, ''),
         pooler: u.hostname.endsWith('.pooler.supabase.com'),
-        pgbouncer: u.searchParams.get('pgbouncer') || null,
-        sslmode: u.searchParams.get('sslmode') || null,
+        pgbouncer: u.searchParams.get('pgbouncer') ?? null,
+        sslmode: u.searchParams.get('sslmode') ?? null,
         userPresent: Boolean(u.username),
       };
     } catch {
@@ -98,8 +98,8 @@ export async function GET(req: Request) {
   const functionRegion = vercelId ? vercelId.split('::')[0] : null;
 
   const caLen = (() => {
-    const b64 = process.env.PG_CA_CERT_B64 || '';
-    const pem = process.env.PG_CA_CERT || '';
+    const b64 = process.env.PG_CA_CERT_B64 ?? '';
+    const pem = process.env.PG_CA_CERT ?? '';
     if (b64)
       return {
         source: 'PG_CA_CERT_B64',
@@ -118,7 +118,7 @@ export async function GET(req: Request) {
     runtime: {
       node: process.version,
       vercel: Boolean(process.env.VERCEL),
-      vercelEnv: process.env.VERCEL_ENV || null,
+      vercelEnv: process.env.VERCEL_ENV ?? null,
       functionRegion,
     },
     caInfo: caLen,

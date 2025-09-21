@@ -11,7 +11,7 @@ async function finalCleanup() {
 
     const { Pool } = await import('pg');
 
-    const urlRaw = process.env.DATABASE_URL || '';
+    const urlRaw = process.env.DATABASE_URL ?? '';
     const connectionString = urlRaw
       ? urlRaw
           .replace(':6543/', ':5432/')
@@ -19,7 +19,7 @@ async function finalCleanup() {
       : urlRaw;
 
     const finalConnectionString =
-      connectionString?.replace(/[?&]sslmode=require/, '') || connectionString;
+      connectionString.replace(/[?&]sslmode=require/, '') || connectionString;
 
     const ssl = { rejectUnauthorized: false };
 

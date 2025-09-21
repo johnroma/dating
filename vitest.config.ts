@@ -3,7 +3,7 @@ import path from 'node:path';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
 
-import { ensureLocalhostDnsResolution } from './vitest.dns-patch';
+import { ensureLocalhostDnsResolution } from '@/vitest.dns-patch';
 
 ensureLocalhostDnsResolution();
 

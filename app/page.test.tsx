@@ -1,6 +1,8 @@
 import React from 'react';
 import { renderToString } from 'react-dom/server';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+import Home from '@/app/page';
 
 // Mock Next App Router hooks so client components render in tests
 vi.mock('next/navigation', () => ({
@@ -13,8 +15,6 @@ vi.mock('next/navigation', () => ({
     prefetch: vi.fn(),
   }),
 }));
-
-import Home from './page';
 
 describe('Home', () => {
   it('renders gallery heading', () => {

@@ -1,12 +1,13 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
-import { headers, cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import Link from 'next/link';
 import React from 'react';
 
-import './globals.css';
 import { computePgSsl } from '@/src/lib/db/pg-ssl';
 import { getSession } from '@/src/ports/auth';
+
+import '@/app/globals.css';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -39,8 +40,8 @@ export default async function RootLayout({
   const hasSb = Boolean(jar.get('sb-access-token')?.value);
   const hasDev = Boolean(jar.get('sess')?.value);
   const authSource = hasSb ? 'supabase' : hasDev ? 'dev' : 'none';
-  const dbDriver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
-  const dbUrl = process.env.DATABASE_URL || '';
+  const dbDriver = (process.env.DB_DRIVER ?? 'sqlite').toLowerCase();
+  const dbUrl = process.env.DATABASE_URL ?? '';
   let urlInfo: {
     host: string;
     port: string;
@@ -142,7 +143,7 @@ export default async function RootLayout({
                 {urlInfo ? (
                   <span>
                     pooler:{String(urlInfo.pooler)} pgbouncer:
-                    {urlInfo.pgbouncer || 'n/a'}
+                    {urlInfo.pgbouncer ?? 'n/a'}
                   </span>
                 ) : null}
                 {sslMode ? <span>ssl:{sslMode}</span> : null}

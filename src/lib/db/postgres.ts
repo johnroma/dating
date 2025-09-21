@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 
-import { computePgSsl } from './pg-ssl';
+import { computePgSsl } from '@/src/lib/db/pg-ssl';
 
 const rawCs = process.env.DATABASE_URL;
 if (!rawCs) throw new Error('DATABASE_URL is not set');
@@ -24,7 +24,7 @@ function resolveSsl() {
     const brief =
       ssl === false
         ? 'false'
-        : `{rejectUnauthorized:${(ssl as { rejectUnauthorized?: boolean })?.rejectUnauthorized === false ? 'false' : 'true'},ca:${(ssl as { ca?: string })?.ca ? 'yes' : 'no'}}`;
+        : `{rejectUnauthorized:${(ssl as { rejectUnauthorized?: boolean }).rejectUnauthorized === false ? 'false' : 'true'},ca:${(ssl as { ca?: string }).ca ? 'yes' : 'no'}}`;
     console.info(`[db] pg ssl mode=${mode} ssl=${brief}`);
   }
   return ssl || undefined;

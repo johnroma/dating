@@ -72,10 +72,7 @@ export function validateFormData<T>(
   const result = schema.safeParse(data);
 
   if (!result.success) {
-    const firstError = result.error.issues?.[0];
-    if (!firstError) {
-      throw new Error('Validation failed');
-    }
+    const firstError = result.error.issues[0];
     throw new Error(`${firstError.path.join('.')}: ${firstError.message}`);
   }
 

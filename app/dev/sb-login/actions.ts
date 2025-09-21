@@ -4,25 +4,25 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import {
-  ROUTES,
-  COOKIE_NAMES,
   COOKIE_CONFIG,
   COOKIE_EXPIRY,
-  SUPABASE_ENDPOINTS,
-  SUPABASE_CONFIG,
+  COOKIE_NAMES,
   ERROR_MESSAGES,
-  SUCCESS_MESSAGES,
   getAuthCallbackUrl,
+  ROUTES,
+  SUCCESS_MESSAGES,
+  SUPABASE_CONFIG,
+  SUPABASE_ENDPOINTS,
 } from '@/src/lib/config/constants';
 import {
-  validateEnv,
-  validateFormData,
-  validateApiResponse,
+  errorResponseSchema,
   magicLinkSchema,
+  otpResponseSchema,
   passwordAuthSchema,
   tokenResponseSchema,
-  errorResponseSchema,
-  otpResponseSchema,
+  validateApiResponse,
+  validateEnv,
+  validateFormData,
 } from '@/src/lib/validation/auth';
 
 type AuthEnv = ReturnType<typeof validateEnv>;
@@ -63,8 +63,8 @@ export async function sendMagicLinkAction(formData: FormData) {
     const errorData = await response.json().catch(() => ({}));
     const error = validateApiResponse(errorResponseSchema, errorData);
     const errorMessage =
-      error.error_description ||
-      error.error ||
+      error.error_description ??
+      error.error ??
       ERROR_MESSAGES.MAGIC_LINK_FAILED;
     redirect(
       `${ROUTES.DEV_SB_LOGIN}?error=${encodeURIComponent(errorMessage)}`
@@ -110,7 +110,7 @@ export async function signUpAction(formData: FormData) {
   if (!response.ok) {
     const error = validateApiResponse(errorResponseSchema, data);
     const errorMessage =
-      error.error_description || error.error || ERROR_MESSAGES.SIGNUP_FAILED;
+      error.error_description ?? error.error ?? ERROR_MESSAGES.SIGNUP_FAILED;
     redirect(
       `${ROUTES.DEV_SB_LOGIN}?error=${encodeURIComponent(errorMessage)}`
     );
@@ -142,7 +142,7 @@ export async function signInAction(formData: FormData) {
   if (!response.ok) {
     const error = validateApiResponse(errorResponseSchema, data);
     const errorMessage =
-      error.error_description || error.error || ERROR_MESSAGES.SIGNIN_FAILED;
+      error.error_description ?? error.error ?? ERROR_MESSAGES.SIGNIN_FAILED;
     redirect(
       `${ROUTES.DEV_SB_LOGIN}?error=${encodeURIComponent(errorMessage)}`
     );
@@ -158,7 +158,7 @@ export async function signInAction(formData: FormData) {
   }
 
   const c = await cookies();
-  const maxAge = Math.min(expires_in || 3600, COOKIE_EXPIRY.ACCESS_TOKEN);
+  const maxAge = Math.min(expires_in ?? 3600, COOKIE_EXPIRY.ACCESS_TOKEN);
 
   c.set(COOKIE_NAMES.ACCESS_TOKEN, access_token, {
     httpOnly: COOKIE_CONFIG.HTTP_ONLY,

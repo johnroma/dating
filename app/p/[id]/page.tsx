@@ -1,15 +1,15 @@
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-export const fetchCache = 'force-no-store';
-export const runtime = 'nodejs';
-export const preferredRegion = 'arn1';
-
 import { unstable_noStore as noStore } from 'next/cache';
 import Image from 'next/image';
 import Link from 'next/link';
 
 import { getDb } from '@/src/lib/db';
 import { getSession } from '@/src/ports/auth';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
+export const runtime = 'nodejs';
+export const preferredRegion = 'arn1';
 
 export default async function PhotoPage({
   params,
@@ -33,12 +33,12 @@ export default async function PhotoPage({
     );
   }
 
-  const url = photo.sizesjson?.lg || photo.sizesjson?.md || photo.sizesjson?.sm;
-  const storageDriver = process.env.STORAGE_DRIVER || 'local';
+  const url = photo.sizesjson.lg || photo.sizesjson.md || photo.sizesjson.sm;
+  const storageDriver = process.env.STORAGE_DRIVER ?? 'local';
   const CDN_BASE =
     storageDriver === 'r2'
-      ? process.env.CDN_BASE_URL || '/mock-cdn'
-      : process.env.NEXT_PUBLIC_CDN_BASE_URL || '/mock-cdn';
+      ? (process.env.CDN_BASE_URL ?? '/mock-cdn')
+      : (process.env.NEXT_PUBLIC_CDN_BASE_URL ?? '/mock-cdn');
   const unopt = CDN_BASE.startsWith('/');
 
   return (

@@ -1,13 +1,14 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+
+import { afterAll, beforeAll, expect, it } from 'vitest';
 
 // For sandboxed runs (this agent), enable mock by setting MOCK_NATIVE=1
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 if (process.env.MOCK_NATIVE === '1')
   require('./helpers/mock-better-sqlite3').setupBetterSqlite3Mock();
-import fs from 'node:fs';
-import path from 'node:path';
 
 const TMP = path.join(process.cwd(), '.data/db/test.db');
 

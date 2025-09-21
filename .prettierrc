@@ -11,5 +11,11 @@
   "endOfLine": "lf",
   "quoteProps": "as-needed",
   "jsxSingleQuote": true,
-  "proseWrap": "preserve"
+  "proseWrap": "preserve",
+  "htmlWhitespaceSensitivity": "css",
+  "insertPragma": false,
+  "requirePragma": false,
+  "rangeStart": 0,
+  "embeddedLanguageFormatting": "auto",
+  "singleAttributePerLine": false
 }

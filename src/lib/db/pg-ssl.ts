@@ -35,7 +35,7 @@ function readCaFromEnv(): string | undefined {
     }
   }
   const pem = process.env.PG_CA_CERT;
-  return pem || undefined;
+  return pem ?? undefined;
 }
 
 function envNoVerify(): boolean {

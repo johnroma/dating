@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { parseRole, isAllowed, canAccess, type Role } from './roles';
+import { canAccess, isAllowed, parseRole, type Role } from '@/src/lib/roles';
 
 describe('roles.ts', () => {
   it('parseRole defaults to guest for missing/invalid', () => {

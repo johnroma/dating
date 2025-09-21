@@ -22,7 +22,7 @@ export default function PhotoUploader() {
       fd.set('file', file);
       const upRes = await fetch('/api/ut/upload', { method: 'POST', body: fd });
       const upJson = await upRes.json();
-      if (!upRes.ok) throw new Error(upJson?.error || 'Upload failed');
+      if (!upRes.ok) throw new Error(upJson?.error ?? 'Upload failed');
       const key = upJson.key as string;
       const pHash = upJson.pHash as string;
 
@@ -32,7 +32,7 @@ export default function PhotoUploader() {
         body: JSON.stringify({ key, pHash }),
       });
       const igJson = await igRes.json();
-      if (!igRes.ok) throw new Error(igJson?.error || 'Ingest failed');
+      if (!igRes.ok) throw new Error(igJson?.error ?? 'Ingest failed');
 
       setFile(null);
 
@@ -51,11 +51,11 @@ export default function PhotoUploader() {
   }
 
   return (
-    <form onSubmit={onSubmit} className='mt-4 flex flex-col gap-3'>
+    <form onSubmit={e => void onSubmit(e)} className='mt-4 flex flex-col gap-3'>
       <input
         type='file'
         accept='image/*'
-        onChange={e => setFile(e.currentTarget.files?.[0] || null)}
+        onChange={e => setFile(e.currentTarget.files?.[0] ?? null)}
       />
       <button
         disabled={loading || !file}

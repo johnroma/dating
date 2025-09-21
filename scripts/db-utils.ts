@@ -6,7 +6,7 @@
  * and perform common operations. Use this for all future database scripts.
  *
  * Usage:
- *   import { getDbClient, withDbClient } from './scripts/db-utils';
+ *   import { getDbClient, withDbClient } from '@/scripts/scripts/db-utils';
  *
  *   // Simple operations
  *   const client = await getDbClient();
@@ -24,7 +24,7 @@
 import { config } from 'dotenv';
 import { PoolClient } from 'pg';
 
-import { dbPool } from './shared-db-config';
+import { dbPool } from '@/scripts/shared-db-config';
 
 // Load environment variables
 config({ path: '.env.local' });

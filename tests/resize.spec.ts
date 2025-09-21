@@ -1,11 +1,12 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { makeVariants } from '../src/lib/images/resize';
-import { localStorageRoot } from '../src/lib/storage/paths';
 import sharp from 'sharp';
+import { afterAll, beforeAll, expect, it } from 'vitest';
+
+import { makeVariants } from '@/src/lib/images/resize';
+import { localStorageRoot } from '@/src/lib/storage/paths';
 
 const TMP_DB = path.join(process.cwd(), '.data/db/test.db');
 const PHOTO_ID = `t-${Date.now()}`;

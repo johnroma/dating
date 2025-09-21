@@ -1,9 +1,10 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { ORIG, ROOT } from '../src/lib/storage/fs';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import { ROOT } from '@/src/lib/storage/fs';
 
 const RUN = process.env.RUN_R2_TESTS === '1' && !!process.env.S3_ENDPOINT;
 const TMP_DB = path.join(process.cwd(), '.data/db/test.db');

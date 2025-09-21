@@ -83,7 +83,7 @@ export function setupBetterSqlite3Mock() {
             a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0
           );
           return rows
-            .slice(offset || 0, (offset || 0) + (limit || rows.length))
+            .slice(offset ?? 0, (offset ?? 0) + (limit ?? rows.length))
             .map(r => ({ ...r }));
         }
         return [] as any;

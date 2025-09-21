@@ -7,13 +7,13 @@
 import { Pool } from 'pg';
 
 // Build connection string and SSL options from env (same as postgres.ts)
-const urlRaw = process.env.DATABASE_URL || '';
+const urlRaw = process.env.DATABASE_URL ?? '';
 const connectionString = urlRaw
   ? urlRaw.replace(':6543/', ':5432/').replace('/postgrespostgres', '/postgres')
   : urlRaw;
 
 const finalConnectionString =
-  connectionString?.replace(/[?&]sslmode=require/, '') || connectionString;
+  connectionString.replace(/[?&]sslmode=require/, '') || connectionString;
 
 // Simple SSL configuration for Supabase (same as postgres.ts)
 const ssl = {
@@ -48,7 +48,7 @@ async function testConnection() {
         'SELECT * FROM photo WHERE status = $1 AND deletedat IS NULL ORDER BY createdat DESC LIMIT $2 OFFSET $3',
         ['APPROVED', 30, 0]
       ),
-      new Promise((_, reject) =>
+      new Promise((resolve, reject) =>
         setTimeout(() => reject(new Error('Query timeout')), 10000)
       ),
     ]);

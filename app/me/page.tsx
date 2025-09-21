@@ -2,10 +2,9 @@
 import Image from 'next/image';
 import { redirect } from 'next/navigation';
 
+import { deletePhoto } from '@/app/me/actions';
 import { getDb } from '@/src/lib/db';
 import { getSession } from '@/src/ports/auth';
-
-import { deletePhoto } from './actions';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -32,7 +31,7 @@ export default async function MePage() {
         }}
       >
         {photos.map(p => {
-          const preview = p.sizesjson?.md || p.sizesjson?.sm || p.sizesjson?.lg;
+          const preview = p.sizesjson.md || p.sizesjson.sm || p.sizesjson.lg;
           return (
             <div
               key={p.id}

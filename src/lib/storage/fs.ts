@@ -2,9 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import {
-  localStorageRoot,
-  localOrigRoot,
   localCdnRoot,
+  localOrigRoot,
+  localStorageRoot,
 } from '@/src/lib/storage/paths';
 
 export const ROOT = localStorageRoot();

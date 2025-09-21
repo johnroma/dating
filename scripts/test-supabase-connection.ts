@@ -16,13 +16,13 @@ type DatabaseError = Error & {
 
 // Use the original Supabase connection string without modifications
 const connectionString =
-  process.env.DATABASE_URL?.replace(/[?&]sslmode=require/, '') || '';
+  process.env.DATABASE_URL?.replace(/[?&]sslmode=require/, '') ?? '';
 
 async function testSupabaseConnection() {
   console.log('🔌 Testing Supabase connection with original string...');
   console.log(
     '🔗 Connection string:',
-    `${connectionString?.substring(0, 50)}...`
+    `${connectionString.substring(0, 50)}...`
   );
 
   const client = new Client({

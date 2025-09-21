@@ -5,10 +5,10 @@
  */
 import * as pg from 'pg';
 
-import { computePgSsl } from './pg-ssl';
+import { computePgSsl } from '@/src/lib/db/pg-ssl';
 
 // Only configure SSL if we're using PostgreSQL
-const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
+const driver = (process.env.DB_DRIVER ?? 'sqlite').toLowerCase();
 if (driver === 'postgres') {
   const { ssl, mode } = computePgSsl(process.env.DATABASE_URL);
   (pg as { defaults: { ssl?: unknown } }).defaults.ssl = ssl || undefined;
@@ -20,7 +20,7 @@ if (driver === 'postgres') {
     const brief =
       ssl === false
         ? 'false'
-        : `{rejectUnauthorized:${(ssl as { rejectUnauthorized?: boolean })?.rejectUnauthorized === false ? 'false' : 'true'},ca:${(ssl as { ca?: string })?.ca ? 'yes' : 'no'}}`;
+        : `{rejectUnauthorized:${(ssl as { rejectUnauthorized?: boolean }).rejectUnauthorized === false ? 'false' : 'true'},ca:${(ssl as { ca?: string }).ca ? 'yes' : 'no'}}`;
     console.info(`[db] pg.defaults.ssl set, mode=${mode} ssl=${brief}`);
   }
 }

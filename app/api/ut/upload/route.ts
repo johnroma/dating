@@ -1,6 +1,3 @@
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-
 import mime from 'mime';
 import { NextResponse } from 'next/server';
 import sharp from 'sharp';
@@ -14,8 +11,11 @@ import { isLocalDriver } from '@/src/lib/storage/paths';
 import { getStorage } from '@/src/ports/storage';
 import { getUploadCapabilities } from '@/src/ports/upload-policy';
 
-const MAX_BYTES = Number(process.env.UPLOAD_MAX_BYTES || 10 * 1024 * 1024);
-const LIMIT_UPLOADS = Number(process.env.RATE_UPLOADS_PER_MINUTE || 20);
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+const MAX_BYTES = Number(process.env.UPLOAD_MAX_BYTES ?? 10 * 1024 * 1024);
+const LIMIT_UPLOADS = Number(process.env.RATE_UPLOADS_PER_MINUTE ?? 20);
 const ALLOWED = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 export async function POST(req: Request) {
@@ -67,19 +67,19 @@ export async function POST(req: Request) {
   // megapixel/dimension guard
   const meta = await sharp(buf).metadata();
   const dim = validateDimensions(meta, {
-    maxPixels: Number(process.env.UPLOAD_MAX_PIXELS || 40_000_000),
-    maxW: Number(process.env.UPLOAD_MAX_WIDTH || 12_000),
-    maxH: Number(process.env.UPLOAD_MAX_HEIGHT || 12_000),
+    maxPixels: Number(process.env.UPLOAD_MAX_PIXELS ?? 40_000_000),
+    maxW: Number(process.env.UPLOAD_MAX_WIDTH ?? 12_000),
+    maxH: Number(process.env.UPLOAD_MAX_HEIGHT ?? 12_000),
   });
   if (!dim.ok)
     return NextResponse.json(
-      { error: dim.reason || 'dimension_error' },
+      { error: dim.reason ?? 'dimension_error' },
       { status: 413 }
     );
 
   // Generate key (preserve existing flow)
-  const type = effectiveType || 'application/octet-stream';
-  const ext = mime.getExtension(type) || 'bin';
+  const type = effectiveType ?? 'application/octet-stream';
+  const ext = mime.getExtension(type) ?? 'bin';
   const key = `${uuid()}.${ext}`;
 
   // save original using storage adapter (works with both local and R2)

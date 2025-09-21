@@ -1,7 +1,3 @@
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-export const preferredRegion = 'arn1';
-
 import crypto from 'node:crypto';
 
 import { NextResponse } from 'next/server';
@@ -15,7 +11,11 @@ import { ipFromHeaders, limit } from '@/src/lib/rate/limiter';
 import { getSession } from '@/src/ports/auth';
 import { getStorage } from '@/src/ports/storage';
 
-const LIMIT_INGESTS = Number(process.env.RATE_INGESTS_PER_MINUTE || 60);
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const preferredRegion = 'arn1';
+
+const LIMIT_INGESTS = Number(process.env.RATE_INGESTS_PER_MINUTE ?? 60);
 
 export async function POST(req: Request) {
   // basic rate limit per IP
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
   // Determine actor role via session (session-only; no legacy role cookie)
   const db = getDb();
   const sess = await getSession().catch(() => null);
-  const session_role = (sess?.role as 'guest' | 'member' | 'admin') || 'guest';
+  const session_role = sess?.role as 'guest' | 'member' | 'admin';
 
   // Block guests from ingest entirely
   if (session_role === 'guest') {
@@ -47,24 +47,22 @@ export async function POST(req: Request) {
   }
 
   // Step 7 idempotency (by explicit key or implicit key:<origKey>)
-  const idem = idempotencyKey || `key:${key}`;
+  const idem = idempotencyKey ?? `key:${key}`;
   const candidateId = crypto
     .createHash('sha256')
     .update(idem)
     .digest('hex')
     .slice(0, 24);
   // Try to bind idem to an existing photo by origKey first
-  const existing = await db.getByOrigKey?.(key);
+  const existing = await db.getByOrigKey(key);
   if (existing) {
     try {
-      const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
+      const driver = (process.env.DB_DRIVER ?? 'sqlite').toLowerCase();
       if (driver === 'postgres') {
         const { upsertIngestKey } = await import(
           '@/src/lib/db/adapters/postgres'
         );
-        if (upsertIngestKey) {
-          await upsertIngestKey(idem, existing.id);
-        }
+        await upsertIngestKey(idem, existing.id);
       } else {
         const { upsertIngestKey } = await import(
           '@/src/lib/db/adapters/sqlite'
@@ -109,10 +107,7 @@ export async function POST(req: Request) {
     enforceQuotaOrThrow(session_role, usage, quota);
   } catch (e: unknown) {
     const error = e as Error & { code?: string };
-    return NextResponse.json(
-      { error: error?.code || 'quota' },
-      { status: 429 }
-    );
+    return NextResponse.json({ error: error.code ?? 'quota' }, { status: 429 });
   }
 
   // Duplicate detection
@@ -189,11 +184,11 @@ export async function POST(req: Request) {
         width,
         height,
         createdat: new Date().toISOString(),
-        phash: pHash || null,
+        phash: pHash ?? null,
         duplicateof: null, // No longer needed since we prevent duplicates
         ownerid: ownerId,
       },
-      ownerEmail || undefined
+      ownerEmail ?? undefined
     );
   } catch (error) {
     if (

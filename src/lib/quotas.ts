@@ -57,6 +57,6 @@ export async function getUsage(): Promise<{
 }> {
   const db = getDb();
   // If you later want per-member quotas, change this to per-member queries.
-  const total = (await db.countApproved?.()) ?? 0;
+  const total = await db.countApproved();
   return { photos: Number(total) || 0, bytesToday: 0 };
 }

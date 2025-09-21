@@ -5,7 +5,7 @@
  * Run this after deploying the schema changes to ensure indexes are created.
  */
 
-import { ensurePostgresSchema } from '../src/lib/db/ensure-postgres';
+import { ensurePostgresSchema } from '@/src/lib/db/ensure-postgres';
 
 async function main() {
   console.log('Applying database indexes for better query performance...');
@@ -25,4 +25,4 @@ async function main() {
   }
 }
 
-main();
+await main();

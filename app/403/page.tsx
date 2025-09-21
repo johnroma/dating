@@ -8,9 +8,9 @@ export default async function ForbiddenPage({
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const sess = await getSession().catch(() => null);
-  const role = sess?.role || 'viewer';
+  const role = sess?.role ?? 'viewer';
   const sp = await searchParams;
-  const from = typeof sp?.from === 'string' ? sp.from : undefined;
+  const from = typeof sp.from === 'string' ? sp.from : undefined;
 
   return (
     <main className='mx-auto max-w-2xl p-6'>

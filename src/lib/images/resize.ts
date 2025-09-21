@@ -26,11 +26,11 @@ export async function makeVariants(args: {
   const width = Math.round(meta.width || 0);
   const height = Math.round(meta.height || 0);
 
-  const storageDriver = process.env.STORAGE_DRIVER || 'local';
+  const storageDriver = process.env.STORAGE_DRIVER ?? 'local';
   const base =
     storageDriver === 'r2'
-      ? process.env.CDN_BASE_URL || '/mock-cdn'
-      : process.env.NEXT_PUBLIC_CDN_BASE_URL || '/mock-cdn';
+      ? (process.env.CDN_BASE_URL ?? '/mock-cdn')
+      : (process.env.NEXT_PUBLIC_CDN_BASE_URL ?? '/mock-cdn');
 
   const entries: Array<['sm' | 'md' | 'lg', number]> = [
     ['sm', SIZES.sm],

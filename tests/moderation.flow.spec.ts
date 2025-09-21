@@ -1,10 +1,11 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { localOrigRoot, localStorageRoot } from '../src/lib/storage/paths';
-import { ensureLocalStorageDirs } from '../src/adapters/storage/local';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+import { ensureLocalStorageDirs } from '@/src/adapters/storage/local';
+import { localOrigRoot, localStorageRoot } from '@/src/lib/storage/paths';
 
 const TMP_DB = path.join(process.cwd(), '.data/db/test.db');
 

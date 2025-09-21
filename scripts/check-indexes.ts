@@ -4,7 +4,7 @@
  * Check if the database indexes exist and analyze query performance
  */
 
-import { dbPool } from './shared-db-config';
+import { dbPool } from '@/scripts/shared-db-config';
 
 async function checkIndexes() {
   console.log('🔍 Checking database indexes and performance...');
@@ -63,8 +63,8 @@ async function checkIndexes() {
     const plan = explainQuery.rows[0]['QUERY PLAN'][0];
     console.log(`- Execution time: ${plan['Execution Time']}ms`);
     console.log(`- Planning time: ${plan['Planning Time']}ms`);
-    console.log(`- Index used: ${plan.Plan?.['Index Name'] || 'No index'}`);
-    console.log(`- Rows examined: ${plan.Plan?.['Actual Rows'] || 'N/A'}`);
+    console.log(`- Index used: ${plan.Plan?.['Index Name'] ?? 'No index'}`);
+    console.log(`- Rows examined: ${plan.Plan?.['Actual Rows'] ?? 'N/A'}`);
   } catch (error) {
     console.error('❌ Error checking indexes:', error);
   } finally {
