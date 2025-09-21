@@ -3,6 +3,8 @@ export const runtime = 'nodejs';
 import { NextResponse } from 'next/server';
 import { Client } from 'pg';
 
+import { computePgSsl } from '@/src/lib/db/pg-ssl';
+
 type ConnectionConfig = {
   host?: string;
   hostname?: string;
@@ -23,38 +25,9 @@ function parseConnectionString(connectionString: string): ConnectionConfig {
   };
 }
 
-function sslConfig() {
-  const forceNoVerify =
-    process.env.PG_FORCE_NO_VERIFY === '1' ||
-    process.env.PGSSL_NO_VERIFY === '1';
-  const caB64 = process.env.PG_CA_CERT_B64 || '';
+// legacy helper removed; computePgSsl is the single source of truth
 
-  if (forceNoVerify) {
-    return {
-      mode: 'forced-no-verify' as const,
-      ssl: { rejectUnauthorized: false } as const,
-      meta: { rejectUnauthorized: false, ca: false },
-    };
-  }
-
-  if (caB64) {
-    const ca = Buffer.from(caB64, 'base64').toString('utf8');
-    return {
-      mode: 'verify-ca' as const,
-      ssl: { ca, rejectUnauthorized: true } as const,
-      meta: { rejectUnauthorized: true, ca: true },
-    };
-  }
-
-  // Minimal fallback: encrypted but default trust store
-  return {
-    mode: 'require-no-custom-ca' as const,
-    ssl: true as const,
-    meta: { rejectUnauthorized: true, ca: false },
-  };
-}
-
-export async function GET() {
+export async function GET(req: Request) {
   const cs = process.env.DATABASE_URL || '';
   if (!cs) {
     return NextResponse.json(
@@ -65,7 +38,12 @@ export async function GET() {
 
   // Build a fresh client – do NOT reuse any app-level Pool here.
   const conn = parseConnectionString(cs);
-  const { mode, ssl, meta } = sslConfig();
+  const { ssl, mode } = computePgSsl(cs);
+  const meta = {
+    rejectUnauthorized:
+      typeof ssl === 'object' ? ssl?.rejectUnauthorized !== false : true,
+    ca: typeof ssl === 'object' ? Boolean((ssl as { ca?: string }).ca) : false,
+  } as const;
 
   const client = new Client({
     host: conn.host || conn.hostname,
@@ -73,15 +51,20 @@ export async function GET() {
     user: conn.user,
     password: conn.password,
     database: conn.database,
-    ssl,
+    ssl: ssl || undefined,
   });
 
   let ok = false;
   let err: string | null = null;
+  let tConnect = 0;
+  let tQuery = 0;
 
   try {
+    const t0 = Date.now();
     await client.connect();
+    tConnect = Date.now() - t0;
     const r = await client.query('select 1 as ok');
+    tQuery = Date.now() - (t0 + tConnect);
     ok = r.rows?.[0]?.ok === 1;
   } catch (e: unknown) {
     err = e instanceof Error ? e.message : String(e);
@@ -93,10 +76,52 @@ export async function GET() {
     }
   }
 
+  // Enriched diagnostics (no secrets): parsed URL info, SSL mode, timings, runtime.
+  const urlInfo = (() => {
+    try {
+      const u = new URL(cs);
+      return {
+        host: u.hostname,
+        port: u.port || '5432',
+        database: u.pathname.replace(/^\//, ''),
+        pooler: u.hostname.endsWith('.pooler.supabase.com'),
+        pgbouncer: u.searchParams.get('pgbouncer') || null,
+        sslmode: u.searchParams.get('sslmode') || null,
+        userPresent: Boolean(u.username),
+      };
+    } catch {
+      return null;
+    }
+  })();
+
+  const vercelId = req.headers.get('x-vercel-id');
+  const functionRegion = vercelId ? vercelId.split('::')[0] : null;
+
+  const caLen = (() => {
+    const b64 = process.env.PG_CA_CERT_B64 || '';
+    const pem = process.env.PG_CA_CERT || '';
+    if (b64)
+      return {
+        source: 'PG_CA_CERT_B64',
+        bytes: Math.floor(b64.length * 0.75),
+      };
+    if (pem) return { source: 'PG_CA_CERT', bytes: pem.length };
+    return { source: null, bytes: 0 };
+  })();
+
   return NextResponse.json({
     mode,
     ssl: meta,
-    testQueryOk: ok,
+    timings: { connectMs: tConnect, queryMs: tQuery },
+    ok,
+    url: urlInfo,
+    runtime: {
+      node: process.version,
+      vercel: Boolean(process.env.VERCEL),
+      vercelEnv: process.env.VERCEL_ENV || null,
+      functionRegion,
+    },
+    caInfo: caLen,
     ...(err ? { error: err } : {}),
   });
 }
