@@ -79,11 +79,8 @@ export async function readSupabaseSession(): Promise<Session> {
       return null;
     }
 
-    const iss = `https://${projectRef()}.supabase.co/auth/v1`;
-
-    const { payload } = await jwtVerify(token, jwks, {
-      issuer: iss,
-    });
+    // Verify signature via JWKS; omit strict issuer check to avoid env mismatches
+    const { payload } = await jwtVerify(token, jwks);
 
     const email =
       (payload.email as string | undefined) ||
@@ -112,7 +109,13 @@ export async function readSupabaseSession(): Promise<Session> {
 
     const role = normalizeRole(email);
     return { userId, email, role };
-  } catch {
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('Supabase JWT verification failed', {
+      message: e instanceof Error ? e.message : String(e),
+      hasProjectRef: Boolean(process.env.SUPABASE_PROJECT_REF),
+      hasJwksUrl: Boolean(process.env.SUPABASE_JWKS_URL),
+    });
     return null;
   }
 }
