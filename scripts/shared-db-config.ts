@@ -5,10 +5,10 @@
 
 import { Pool } from 'pg';
 
-import { computePgSsl } from '@/src/lib/db/pg-ssl';
+import { computePgSsl } from '../src/lib/db/pg-ssl';
 
 // Use the same connection string logic as the app's Postgres adapter
-const urlRaw = process.env.DATABASE_URL ?? '';
+const urlRaw = process.env.DATABASE_URL || '';
 // Fix the connection string - remove duplicate database segment and normalize query params
 let finalConnectionString = urlRaw.replace('/postgrespostgres', '/postgres');
 

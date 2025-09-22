@@ -15,13 +15,13 @@ type DatabaseError = Error & {
 };
 
 // Build connection string and SSL options from env (same as postgres.ts)
-const urlRaw = process.env.DATABASE_URL ?? '';
+const urlRaw = process.env.DATABASE_URL || '';
 const connectionString = urlRaw
   ? urlRaw.replace(':6543/', ':5432/').replace('/postgrespostgres', '/postgres')
   : urlRaw;
 
 const finalConnectionString =
-  connectionString.replace(/[?&]sslmode=require/, '') || connectionString;
+  connectionString?.replace(/[?&]sslmode=require/, '') || connectionString;
 
 // Simple SSL configuration for Supabase (same as postgres.ts)
 const ssl = {
@@ -33,7 +33,7 @@ async function testSimpleConnection() {
   console.log('🔌 Testing simple database connection...');
   console.log(
     '🔗 Connection string:',
-    `${finalConnectionString.substring(0, 50)}...`
+    `${finalConnectionString?.substring(0, 50)}...`
   );
 
   const client = new Client({

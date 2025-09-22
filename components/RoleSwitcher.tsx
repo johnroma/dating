@@ -20,21 +20,21 @@ export default function RoleSwitcher({
       <div className='flex gap-2'>
         <button
           className='rounded border px-3 py-1'
-          onClick={() => void onSetRole('guest')}
+          onClick={() => onSetRole('viewer')}
         >
-          Guest
+          Viewer
         </button>
         <button
           className='rounded border px-3 py-1'
-          onClick={() => void onSetRole('member')}
+          onClick={() => onSetRole('creator')}
         >
-          Member
+          Creator
         </button>
         <button
           className='rounded border px-3 py-1'
-          onClick={() => void onSetRole('admin')}
+          onClick={() => onSetRole('moderator')}
         >
-          Admin
+          Moderator
         </button>
       </div>
     </div>

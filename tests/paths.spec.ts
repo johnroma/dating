@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 describe('paths on vercel', () => {
   const old = { ...process.env };
@@ -9,8 +9,8 @@ describe('paths on vercel', () => {
     process.env = old;
   });
 
-  it('localOrigRoot points to /tmp on vercel', async () => {
-    const { localOrigRoot } = await import('@/src/lib/storage/paths');
-    expect(localOrigRoot().startsWith('/tmp/')).toBe(true);
+  it('localOrigDir points to /tmp on vercel', async () => {
+    const { localOrigDir } = await import('@/src/lib/paths');
+    expect(localOrigDir().startsWith('/tmp/')).toBe(true);
   });
 });

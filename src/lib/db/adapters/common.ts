@@ -1,4 +1,4 @@
-import type { Photo, PhotoStatus } from '@/src/lib/db/types';
+import type { Photo, PhotoStatus } from '../types';
 
 /**
  * Database Adapter Common Utilities
@@ -20,7 +20,7 @@ export function mapRowToPhoto(row: unknown): Photo | undefined {
     sizesjson:
       typeof r.sizesjson === 'string'
         ? JSON.parse(r.sizesjson)
-        : (r.sizesjson as Record<string, string>),
+        : (r.sizesjson as Record<string, string>) || {},
     width: r.width ? Number(r.width) : null,
     height: r.height ? Number(r.height) : null,
     createdat: String(r.createdat),
@@ -43,7 +43,7 @@ export function mapRowToMember(
 
   return {
     id: String(r.id),
-    displayName: String(r.displayname ?? r.displayName ?? r.display_name ?? ''),
+    displayName: String(r.displayname || r.displayName || r.display_name || ''),
     role: r.role as 'member' | 'admin',
   };
 }
@@ -103,8 +103,8 @@ export const PHOTO_ORDERING = {
 // Common limit/offset handling
 export function buildLimitOffset(limit?: number, offset?: number) {
   return {
-    limit: limit ?? 50,
-    offset: offset ?? 0,
+    limit: limit || 50,
+    offset: offset || 0,
   };
 }
 

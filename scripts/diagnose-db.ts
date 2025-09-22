@@ -4,7 +4,7 @@
  * Diagnostic script to identify database connection and performance issues
  */
 
-import { getDb } from '@/src/lib/db';
+import { getDb } from '../src/lib/db';
 
 async function diagnoseDatabase() {
   console.log('🔍 Database Diagnostic Report');
@@ -13,10 +13,10 @@ async function diagnoseDatabase() {
   // Check environment
   console.log('\n📋 Environment:');
   console.log(
-    `DB_DRIVER: ${process.env.DB_DRIVER ?? 'undefined (defaults to sqlite)'}`
+    `DB_DRIVER: ${process.env.DB_DRIVER || 'undefined (defaults to sqlite)'}`
   );
   console.log(`DATABASE_URL: ${process.env.DATABASE_URL ? 'Set' : 'Not set'}`);
-  console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
+  console.log(`NODE_ENV: ${process.env.NODE_ENV || 'undefined'}`);
 
   // Test database connection
   console.log('\n🔌 Connection Test:');
@@ -31,7 +31,7 @@ async function diagnoseDatabase() {
     try {
       const photos = await Promise.race([
         db.listApproved(5, 0),
-        new Promise((resolve, reject) =>
+        new Promise((_, reject) =>
           setTimeout(
             () => reject(new Error('Query timeout after 2 seconds')),
             2000

@@ -1,9 +1,9 @@
 import { Pool } from 'pg';
 
-import { ensurePostgresSchema } from '@/src/lib/db/ensure-postgres';
-import type { DbPort } from '@/src/lib/db/port';
-import { getPgPool } from '@/src/lib/db/postgres';
-import type { Photo, PhotoStatus } from '@/src/lib/db/types';
+import { ensurePostgresSchema } from '../ensure-postgres';
+import type { DbPort } from '../port';
+import { getPgPool } from '../postgres';
+import type { Photo, PhotoStatus } from '../types';
 
 // Use the centralized pool configuration (SSL + pool settings) from src/lib/db/postgres.ts
 const pool: Pool = getPgPool();
@@ -22,8 +22,8 @@ async function exec<T = Record<string, unknown>>(
     } & Record<string, unknown>;
   } catch (err) {
     const e = err as { message?: string; code?: string };
-    const msg = String(e.message ?? '');
-    const code = String(e.code ?? '');
+    const msg = String(e?.message || '');
+    const code = String(e?.code || '');
     const isSessionModeMax = /MaxClientsInSessionMode/i.test(msg);
     const isTerminated = code === 'XX000' || /terminat(ed|ion)/i.test(msg);
     if (isSessionModeMax || isTerminated) {
@@ -42,13 +42,12 @@ async function exec<T = Record<string, unknown>>(
 }
 
 // Initialize schema on first connection
-let schemaPromise: Promise<void> | null = null;
+let schemaEnsured = false;
 async function ensureSchema() {
-  if (schemaPromise) {
-    return schemaPromise;
+  if (!schemaEnsured) {
+    await ensurePostgresSchema();
+    schemaEnsured = true;
   }
-  schemaPromise = ensurePostgresSchema();
-  return schemaPromise;
 }
 
 function rowToPhoto(row: Record<string, unknown>): Photo {
@@ -62,7 +61,7 @@ function rowToPhoto(row: Record<string, unknown>): Photo {
     id: String(row['id']),
     status: row['status'] as PhotoStatus,
     origkey: String(row['origkey'] as string),
-    sizesjson: sizes ?? {},
+    sizesjson: sizes || {},
     width: (row['width'] as number | null | undefined) ?? null,
     height: (row['height'] as number | null | undefined) ?? null,
     createdat:
@@ -96,7 +95,7 @@ export const insertPhoto: DbPort['insertPhoto'] = async (
       p.status,
       p.origkey,
       // JSONB accepts JSON; pg serializes objects -> JSON by default
-      JSON.stringify(p.sizesjson),
+      JSON.stringify(p.sizesjson || {}),
       p.width ?? null,
       p.height ?? null,
       p.createdat,
@@ -119,7 +118,7 @@ export const updatePhotoSizes: DbPort['updatePhotoSizes'] = async (
   await pool.query(
     'UPDATE photo SET sizesjson = $1, width = $2, height = $3, updatedat = $4 WHERE id = $5',
     [
-      JSON.stringify(sizesjson),
+      JSON.stringify(sizesjson || {}),
       width ?? null,
       height ?? null,
       new Date().toISOString(),
@@ -179,7 +178,7 @@ export const getPhoto: DbPort['getPhoto'] = async id => {
     await ensureSchema();
     const queryPromise = pool.query('SELECT * FROM photo WHERE id = $1', [id]);
 
-    const timeoutPromise = new Promise((resolve, reject) => {
+    const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => reject(new Error('Query timeout')), 3000);
     });
 
@@ -215,7 +214,7 @@ export const getByOrigKey: DbPort['getByOrigKey'] = async origkey => {
       [origkey]
     );
 
-    const timeoutPromise = new Promise((resolve, reject) => {
+    const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => reject(new Error('Query timeout')), 3000);
     });
 
@@ -254,7 +253,7 @@ export const listApproved: DbPort['listApproved'] = async (
         'SELECT * FROM photo WHERE status = $1 AND deletedat IS NULL ORDER BY createdat DESC LIMIT $2 OFFSET $3',
         ['APPROVED', limit, offset]
       ),
-      new Promise((resolve, reject) =>
+      new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Query timeout')), 3000)
       ),
     ])) as {
@@ -292,7 +291,7 @@ export const listPending: DbPort['listPending'] = async (
         'SELECT * FROM photo WHERE status = $1 ORDER BY createdat DESC LIMIT $2 OFFSET $3',
         ['PENDING', limit, offset]
       ),
-      new Promise((resolve, reject) =>
+      new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Query timeout')), 3000)
       ),
     ])) as {
@@ -330,7 +329,7 @@ export const listRecent: DbPort['listRecent'] = async (
         'SELECT * FROM photo WHERE deletedat IS NULL ORDER BY createdat DESC LIMIT $1 OFFSET $2',
         [limit, offset]
       ),
-      new Promise((resolve, reject) =>
+      new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Query timeout')), 3000)
       ),
     ])) as {
@@ -363,7 +362,7 @@ export const countApproved: DbPort['countApproved'] = async () => {
     'SELECT COUNT(*)::int as c FROM photo WHERE status = $1',
     ['APPROVED']
   );
-  return Number((rows[0] as Record<string, unknown>)['c'] ?? 0);
+  return Number((rows[0] as Record<string, unknown>)?.['c'] ?? 0);
 };
 
 // Step 7 helpers (not in DbPort on purpose; import directly where needed)
@@ -407,15 +406,15 @@ export async function listMembers(): Promise<
       exec(
         'SELECT id, displayname, role FROM account WHERE deletedat IS NULL ORDER BY role DESC, displayname ASC'
       ),
-      new Promise((resolve, reject) =>
+      new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Query timeout')), 3000)
       ),
     ])) as {
       rows: Array<{ id: string; displayname: string; role: string }>;
     };
-    return res.rows.map(row => ({
+    return (res?.rows || []).map(row => ({
       id: String(row.id),
-      displayName: String(row.displayname || ''),
+      displayName: String(row.displayname ?? ''),
       role: row.role as 'member' | 'admin',
     }));
   } catch (error) {
@@ -436,13 +435,13 @@ export async function listPhotosByOwner(ownerId: string): Promise<Photo[]> {
 }
 
 // Graceful shutdown
-process.on('SIGINT', () => {
-  void pool.end();
+process.on('SIGINT', async () => {
+  await pool.end();
   process.exit(0);
 });
 
-process.on('SIGTERM', () => {
-  void pool.end();
+process.on('SIGTERM', async () => {
+  await pool.end();
   process.exit(0);
 });
 

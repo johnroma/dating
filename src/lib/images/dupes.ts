@@ -1,5 +1,6 @@
 import { getDb } from '@/src/lib/db';
-import { hamming } from '@/src/lib/images/hash';
+
+import { hamming } from './hash';
 
 /** Find duplicate photo by perceptual hash comparison. */
 export async function findDuplicateByHash(
@@ -8,7 +9,7 @@ export async function findDuplicateByHash(
   const db = getDb();
 
   // Get recent photos with pHash values
-  const recentPhotos = await db.listRecent(100);
+  const recentPhotos = (await db.listRecent?.(100)) || [];
 
   // Compare with existing photos that have pHash
   for (const photo of recentPhotos) {

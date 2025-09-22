@@ -1,9 +1,10 @@
-import { type NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
 // Parse session cookies for both dev and Supabase auth
 function parseSessionCookie(
   req: NextRequest
-): { role: 'guest' | 'member' | 'admin' } | null {
+): { role: 'viewer' | 'member' | 'admin' } | null {
   // Check for dev session cookie first (only in development)
   if (process.env.NODE_ENV !== 'production') {
     const devSess = req.cookies.get('sess')?.value;
@@ -16,7 +17,7 @@ function parseSessionCookie(
           );
           if (
             json &&
-            (json.role === 'guest' ||
+            (json.role === 'viewer' ||
               json.role === 'member' ||
               json.role === 'admin')
           )
@@ -39,7 +40,7 @@ function parseSessionCookie(
         const decoded = JSON.parse(
           Buffer.from(payload, 'base64url').toString('utf8')
         );
-        const email = decoded.email ?? decoded.user_metadata?.email;
+        const email = decoded.email || decoded.user_metadata?.email;
 
         // For security, we can't check the database in edge middleware
         // But we can still allow access and let server-side validation handle it
@@ -48,7 +49,7 @@ function parseSessionCookie(
         const adminEmails =
           process.env.SUPABASE_ADMIN_EMAILS?.split(',').map(s =>
             s.trim().toLowerCase()
-          ) ?? [];
+          ) || [];
         if (email && adminEmails.includes(email.toLowerCase())) {
           return { role: 'admin' };
         }

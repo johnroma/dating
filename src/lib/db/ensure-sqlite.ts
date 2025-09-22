@@ -5,7 +5,7 @@ import Database from 'better-sqlite3';
 // Simple sql template tag for linting compatibility
 const sql = (strings: TemplateStringsArray, ...values: unknown[]) =>
   strings.reduce(
-    (result, string, i) => result + string + (values[i] ?? ''),
+    (result, string, i) => result + string + (values[i] || ''),
     ''
   );
 

@@ -1,8 +1,7 @@
 // @vitest-environment node
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const TMP_SQLITE = path.join(process.cwd(), '.data/db/test-sqlite.db');
 const TMP_POSTGRES = path.join(process.cwd(), '.data/db/test-postgres.db');
@@ -81,7 +80,7 @@ describe('Database implementations are identical', () => {
     expect(recentList.some(p => p.id === testPhoto.id)).toBe(true);
 
     // Get by original key
-    const byOrigKey = await db.getByOrigKey(testPhoto.origkey);
+    const byOrigKey = await db.getByOrigKey?.(testPhoto.origkey);
     expect(byOrigKey).toBeTruthy();
     expect(byOrigKey!.id).toBe(testPhoto.id);
 
@@ -137,7 +136,7 @@ describe('Database implementations are identical', () => {
     expect(recentList.some(p => p.id === testPhoto.id)).toBe(true);
 
     // Get by original key
-    const byOrigKey = await db.getByOrigKey(testPhoto.origkey);
+    const byOrigKey = await db.getByOrigKey?.(testPhoto.origkey);
     expect(byOrigKey).toBeTruthy();
     expect(byOrigKey!.id).toBe(testPhoto.id);
 
@@ -166,7 +165,7 @@ describe('Database implementations are identical', () => {
     expect(first).toBeTruthy();
 
     // Get by original key should return existing
-    const existing = await sqliteDb.getByOrigKey(testKey1);
+    const existing = await sqliteDb.getByOrigKey?.(testKey1);
     expect(existing).toBeTruthy();
     expect(existing!.id).toBe(testKey1);
 
@@ -184,7 +183,7 @@ describe('Database implementations are identical', () => {
         expect(firstPg).toBeTruthy();
 
         // Get by original key should return existing
-        const existingPg = await postgresDb.getByOrigKey(testKey2);
+        const existingPg = await postgresDb.getByOrigKey?.(testKey2);
         expect(existingPg).toBeTruthy();
         expect(existingPg!.id).toBe(testKey2);
 

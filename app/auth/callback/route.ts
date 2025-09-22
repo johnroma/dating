@@ -4,21 +4,21 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import {
+  ROUTES,
+  COOKIE_NAMES,
   COOKIE_CONFIG,
   COOKIE_EXPIRY,
-  COOKIE_NAMES,
-  ERROR_MESSAGES,
-  ROUTES,
-  SUCCESS_MESSAGES,
-  SUPABASE_CONFIG,
   SUPABASE_ENDPOINTS,
+  SUPABASE_CONFIG,
+  ERROR_MESSAGES,
+  SUCCESS_MESSAGES,
 } from '@/src/lib/config/constants';
 // Keep the types/schemas import-safe at module scope;
 // avoid calling any validation that throws here.
 import {
-  errorResponseSchema,
-  tokenResponseSchema,
   validateApiResponse,
+  tokenResponseSchema,
+  errorResponseSchema,
 } from '@/src/lib/validation/auth';
 
 export const runtime = 'nodejs';
@@ -87,8 +87,8 @@ export async function GET(req: Request) {
     if (!response.ok) {
       const parsed = validateApiResponse(errorResponseSchema, data);
       const msg =
-        parsed.error_description ??
-        parsed.error ??
+        parsed.error_description ||
+        parsed.error ||
         ERROR_MESSAGES.TOKEN_EXCHANGE_FAILED;
       return NextResponse.redirect(
         new URL(
@@ -111,7 +111,7 @@ export async function GET(req: Request) {
     }
 
     const c = await cookies();
-    const maxAge = Math.min(expires_in ?? 3600, COOKIE_EXPIRY.ACCESS_TOKEN);
+    const maxAge = Math.min(expires_in || 3600, COOKIE_EXPIRY.ACCESS_TOKEN);
 
     c.set(COOKIE_NAMES.ACCESS_TOKEN, access_token, {
       httpOnly: COOKIE_CONFIG.HTTP_ONLY,

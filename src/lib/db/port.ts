@@ -1,4 +1,4 @@
-import { Photo, PhotoStatus } from '@/src/lib/db/types';
+import { Photo, PhotoStatus } from './types';
 
 export type DbPort = {
   insertPhoto(p: Photo, userEmail?: string): void | Promise<void>;

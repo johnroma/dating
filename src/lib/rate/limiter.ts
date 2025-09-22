@@ -21,6 +21,6 @@ export function limit(
 }
 
 export function ipFromHeaders(req: Request): string {
-  const xf = (req.headers.get('x-forwarded-for') ?? '').split(',')[0]?.trim();
+  const xf = (req.headers.get('x-forwarded-for') || '').split(',')[0]?.trim();
   return xf || '0.0.0.0';
 }

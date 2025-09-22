@@ -1,11 +1,10 @@
 // @vitest-environment node
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { afterAll, beforeAll, expect, it, vi } from 'vitest';
-
-import { ensureLocalStorageDirs } from '@/src/adapters/storage/local';
-import { localOrigRoot, localStorageRoot } from '@/src/lib/storage/paths';
+import { localOrigDir, localStorageRoot } from '../src/lib/paths';
+import { ensureLocalStorageDirs } from '../src/adapters/storage/local';
 
 const TMP_DB = path.join(process.cwd(), '.data/db/test.db');
 
@@ -53,7 +52,7 @@ it('upload then ingest creates files and DB row', async () => {
   );
   const upJson = await upRes.json();
   expect(upJson.key).toBeTruthy();
-  const origAbs = path.join(localOrigRoot(), upJson.key);
+  const origAbs = path.join(localOrigDir(), upJson.key);
   expect(fs.existsSync(origAbs)).toBe(true);
 
   const igRes = await ingest(

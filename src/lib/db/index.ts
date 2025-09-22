@@ -1,8 +1,8 @@
-import type { DbPort } from '@/src/lib/db/port';
-import type { Photo } from '@/src/lib/db/types';
-
 export * from './port';
 export { getDb };
+
+import type { DbPort } from './port';
+import type { Photo } from './types';
 type AdapterModule = typeof import('./adapters/sqlite') & {
   // Core functions that should be in both adapters
   listRecent: (
@@ -46,7 +46,7 @@ type AdapterModule = typeof import('./adapters/sqlite') & {
 let cached: Promise<AdapterModule> | null = null;
 function load(): Promise<AdapterModule> {
   if (!cached) {
-    const driver = (process.env.DB_DRIVER ?? 'sqlite').toLowerCase();
+    const driver = (process.env.DB_DRIVER || 'sqlite').toLowerCase();
     cached = (async () => {
       try {
         // Only log DB adapter selection in development mode, not during tests
@@ -127,7 +127,7 @@ function getDb(): DbPort {
     softDeletePhoto: async id => {
       try {
         const mod = await load();
-        return mod.softDeletePhoto(id);
+        return mod.softDeletePhoto?.(id);
       } catch (error) {
         console.error('Database error in softDeletePhoto:', {
           photoId: id,
@@ -139,7 +139,7 @@ function getDb(): DbPort {
     restorePhoto: async id => {
       try {
         const mod = await load();
-        return mod.restorePhoto(id);
+        return mod.restorePhoto?.(id);
       } catch (error) {
         console.error('Database error in restorePhoto:', {
           photoId: id,
@@ -196,7 +196,7 @@ function getDb(): DbPort {
     },
     listRejected: async (limit, offset) => {
       try {
-        return (await load()).listRejected(limit, offset) as Photo[];
+        return ((await load()).listRejected?.(limit, offset) ?? []) as Photo[];
       } catch (error) {
         console.error('Database error in listRejected:', {
           limit,
@@ -208,7 +208,7 @@ function getDb(): DbPort {
     },
     listDeleted: async (limit, offset) => {
       try {
-        return (await load()).listDeleted(limit, offset) as Photo[];
+        return ((await load()).listDeleted?.(limit, offset) ?? []) as Photo[];
       } catch (error) {
         console.error('Database error in listDeleted:', {
           limit,
@@ -220,7 +220,8 @@ function getDb(): DbPort {
     },
     listByStatus: async (status, limit, offset) => {
       try {
-        return (await load()).listByStatus(status, limit, offset) as Photo[];
+        return ((await load()).listByStatus?.(status, limit, offset) ??
+          []) as Photo[];
       } catch (error) {
         console.error('Database error in listByStatus:', {
           status,
@@ -233,7 +234,7 @@ function getDb(): DbPort {
     },
     getPhotosByIds: async ids => {
       try {
-        return (await load()).getPhotosByIds(ids) as Photo[];
+        return ((await load()).getPhotosByIds?.(ids) ?? []) as Photo[];
       } catch (error) {
         console.error('Database error in getPhotosByIds:', {
           ids,
@@ -244,7 +245,7 @@ function getDb(): DbPort {
     },
     bulkSetStatus: async (ids, status, extras) => {
       try {
-        return (await load()).bulkSetStatus(ids, status, extras);
+        return (await load()).bulkSetStatus?.(ids, status, extras);
       } catch (error) {
         console.error('Database error in bulkSetStatus:', {
           ids,
@@ -277,7 +278,7 @@ function getDb(): DbPort {
     listRecent: async (limit, offset) => {
       try {
         const adapter = await load();
-        return adapter.listRecent(limit, offset);
+        return adapter.listRecent?.(limit, offset) ?? [];
       } catch (error) {
         console.error('Database error in listRecent:', {
           limit,
@@ -290,7 +291,7 @@ function getDb(): DbPort {
     listPhotosByOwner: async ownerId => {
       try {
         const adapter = await load();
-        return adapter.listPhotosByOwner(ownerId);
+        return adapter.listPhotosByOwner?.(ownerId) ?? [];
       } catch (error) {
         console.error('Database error in listPhotosByOwner:', {
           ownerId,
@@ -375,7 +376,7 @@ function getDb(): DbPort {
     insertAudit: async audit => {
       try {
         const mod = await load();
-        return mod.insertAudit(audit);
+        return mod.insertAudit?.(audit);
       } catch (error) {
         console.error('Database error in insertAudit:', {
           auditId: audit.id,
@@ -387,7 +388,7 @@ function getDb(): DbPort {
     listMembers: async () => {
       try {
         const mod = await load();
-        return mod.listMembers();
+        return mod.listMembers?.() ?? [];
       } catch (error) {
         console.error('Database error in listMembers:', {
           error: error instanceof Error ? error.message : 'Unknown error',
@@ -398,7 +399,7 @@ function getDb(): DbPort {
     updatePhotoStatus: async (id, status, reason) => {
       try {
         const mod = await load();
-        return mod.updatePhotoStatus(id, status, reason);
+        return mod.updatePhotoStatus?.(id, status, reason);
       } catch (error) {
         console.error('Database error in updatePhotoStatus:', {
           photoId: id,

@@ -1,9 +1,9 @@
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 
 import { getDb } from '@/src/lib/db';
-
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
 
 async function probePg() {
   try {
@@ -23,7 +23,7 @@ async function probePg() {
     return { ok: true };
   } catch (e: unknown) {
     const error = e as Error & { code?: string };
-    return { ok: false, err: error.code ?? error.message };
+    return { ok: false, err: error?.code || error?.message || String(e) };
   }
 }
 
@@ -34,13 +34,13 @@ async function head(url?: string) {
     return { ok: true, status: r.status };
   } catch (e: unknown) {
     const error = e as Error & { code?: string };
-    return { ok: false, err: error.code ?? error.message };
+    return { ok: false, err: error?.code || error?.message || String(e) };
   }
 }
 
 export async function GET() {
   const s3Endpoint = process.env.S3_ENDPOINT;
-  const cdn = process.env.CDN_BASE_URL ?? process.env.NEXT_PUBLIC_CDN_BASE_URL;
+  const cdn = process.env.CDN_BASE_URL || process.env.NEXT_PUBLIC_CDN_BASE_URL;
 
   const [pg, s3, cdnProbe] = await Promise.all([
     probePg(),

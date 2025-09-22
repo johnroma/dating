@@ -1,3 +1,9 @@
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
+export const runtime = 'nodejs';
+export const preferredRegion = 'arn1';
+
 import { unstable_noStore as noStore } from 'next/cache';
 import { headers } from 'next/headers';
 import Image from 'next/image';
@@ -8,12 +14,6 @@ import PhotoUploader from '@/components/PhotoUploader';
 import { getDb } from '@/src/lib/db';
 import { getSession } from '@/src/ports/auth';
 
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-export const fetchCache = 'force-no-store';
-export const runtime = 'nodejs';
-export const preferredRegion = 'arn1';
-
 async function Gallery() {
   noStore();
   try {
@@ -23,11 +23,11 @@ async function Gallery() {
     const photos = isModerator
       ? await db.listRecent(200, 0)
       : await db.listApproved(30, 0);
-    const storageDriver = process.env.STORAGE_DRIVER ?? 'local';
+    const storageDriver = process.env.STORAGE_DRIVER || 'local';
     const CDN_BASE =
       storageDriver === 'r2'
-        ? (process.env.CDN_BASE_URL ?? '/mock-cdn')
-        : (process.env.NEXT_PUBLIC_CDN_BASE_URL ?? '/mock-cdn');
+        ? process.env.CDN_BASE_URL || '/mock-cdn'
+        : process.env.NEXT_PUBLIC_CDN_BASE_URL || '/mock-cdn';
     const unopt = CDN_BASE.startsWith('/');
     return (
       <div className='grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4'>
@@ -37,7 +37,7 @@ async function Gallery() {
           </div>
         ) : null}
         {photos.map(p => {
-          const src = p.sizesjson.md || p.sizesjson.sm || p.sizesjson.lg;
+          const src = p?.sizesjson?.md || p?.sizesjson?.sm || p?.sizesjson?.lg;
           if (!src) return null;
           return (
             <Link key={p.id} href={`/p/${p.id}`} className='block'>
@@ -65,8 +65,8 @@ async function Gallery() {
     try {
       const h = await headers();
       const reqId =
-        h.get('x-vercel-id') ?? h.get('x-request-id') ?? h.get('traceparent');
-      const host = h.get('x-forwarded-host') ?? h.get('host');
+        h.get('x-vercel-id') || h.get('x-request-id') || h.get('traceparent');
+      const host = h.get('x-forwarded-host') || h.get('host');
       const origin = h.get('origin');
       // eslint-disable-next-line no-console
       console.error('Gallery load failed', {
@@ -76,12 +76,12 @@ async function Gallery() {
         path: '/',
         host,
         origin,
-        dbDriver: process.env.DB_DRIVER ?? 'sqlite',
+        dbDriver: process.env.DB_DRIVER || 'sqlite',
         databaseUrlSet: Boolean(process.env.DATABASE_URL),
         vercel: Boolean(process.env.VERCEL),
         nodeEnv: process.env.NODE_ENV,
-        storageDriver: process.env.STORAGE_DRIVER ?? 'local',
-        cdnPublicBase: process.env.NEXT_PUBLIC_CDN_BASE_URL ?? undefined,
+        storageDriver: process.env.STORAGE_DRIVER || 'local',
+        cdnPublicBase: process.env.NEXT_PUBLIC_CDN_BASE_URL || undefined,
         message: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
       });

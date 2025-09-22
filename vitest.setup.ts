@@ -1,7 +1,7 @@
 // Vitest setup file
 // This file is run before each test file
 
-import { ensureLocalhostDnsResolution } from '@/vitest.dns-patch';
+import { ensureLocalhostDnsResolution } from './vitest.dns-patch';
 
 ensureLocalhostDnsResolution();
 
@@ -10,7 +10,7 @@ ensureLocalhostDnsResolution();
 process.env.NODE_ENV = 'test';
 process.env.DB_DRIVER = 'sqlite';
 // Use a unique database file for each test worker to avoid locking issues
-const workerId = process.env.VITEST_WORKER_ID ?? '0';
+const workerId = process.env.VITEST_WORKER_ID || '0';
 process.env.DATABASE_FILE = `.data/db/test-worker-${workerId}.db`;
 
 // Clear any PostgreSQL/Supabase env that might trigger network

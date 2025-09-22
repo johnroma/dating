@@ -10,7 +10,7 @@ A modern Next.js 15 dating application with photo uploads, moderation, and dual 
   - **Supabase Auth**: Production-ready with magic links and password auth
   - **Dev Auth**: Local development with role-based access
 - **Database Compatibility**: Works with both SQLite (development) and PostgreSQL (production)
-- **Unified Role System**: Simple `guest`/`member`/`admin` roles used consistently throughout the app
+- **Role-Based Access Control**: Member and admin roles with different permissions
 - **Automatic Account Management**: Supabase users automatically get database accounts
 - **Error Handling**: Comprehensive error handling with graceful degradation
 - **Modern Stack**: Next.js 15, TypeScript, Tailwind CSS, Zod validation
@@ -147,21 +147,6 @@ For local development without external dependencies:
 - **Access Control**:
   - **Members**: Can upload and manage their own photos
   - **Admins**: Can moderate all photos, approve/reject content
-
-## Role System
-
-The app uses a **unified role system** with three simple roles:
-
-- **`guest`**: Unauthenticated users - can view approved photos only
-- **`member`**: Authenticated users - can upload, manage own photos, view approved content
-- **`admin`**: Moderators - can moderate all content, view originals, delete any photo
-
-### Key Benefits
-
-- **Zero Confusion**: Same role names used everywhere (UI, backend, database)
-- **No Mapping**: No need to remember different role names between layers
-- **Simple Logic**: `if (role === 'admin')` works the same in middleware, quotas, and UI
-- **Easy Onboarding**: New developers immediately understand the permission system
 
 ## Photo Management
 

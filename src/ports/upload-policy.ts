@@ -10,8 +10,8 @@ export type UploadCapabilities = {
 /** Adapter-aware capabilities so we avoid double-guarding when a vendor already enforces things. */
 export function getUploadCapabilities(): UploadCapabilities {
   // If you later wire real UploadThing, return their actual guarantees here.
-  if ((process.env.UPLOAD_DRIVER ?? '').toLowerCase() === 'uploadthing') {
-    const maxBytes = Number(process.env.UPLOAD_MAX_BYTES ?? 10 * 1024 * 1024);
+  if ((process.env.UPLOAD_DRIVER || '').toLowerCase() === 'uploadthing') {
+    const maxBytes = Number(process.env.UPLOAD_MAX_BYTES || 10 * 1024 * 1024);
     return {
       guarantees: {
         maxBytes,

@@ -7,7 +7,7 @@ import { readSupabaseSession } from '@/src/lib/auth/supabase-jwt';
 
 // Import Supabase session reader only when needed to prevent network calls during SQLite tests
 
-export type SessionRole = 'guest' | 'member' | 'admin';
+export type SessionRole = 'viewer' | 'member' | 'admin';
 export type Session = { userId: string; role: SessionRole; email?: string };
 
 // Map database roles to application roles (now they match directly)
@@ -17,7 +17,7 @@ export function mapDbRoleToAppRole(dbRole: 'member' | 'admin'): SessionRole {
 
 const SESS_NAME = 'sess';
 const SECRET =
-  process.env.DEV_SESSION_SECRET ?? 'dev-only-secret-please-change';
+  process.env.DEV_SESSION_SECRET || 'dev-only-secret-please-change';
 const MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 
 function b64url(input: Buffer | string) {
@@ -52,7 +52,7 @@ function decode(token: string | undefined | null): Session | null {
     if (
       obj &&
       typeof obj.userId === 'string' &&
-      (obj.role === 'guest' || obj.role === 'member' || obj.role === 'admin')
+      (obj.role === 'viewer' || obj.role === 'member' || obj.role === 'admin')
     ) {
       return { userId: obj.userId, role: obj.role };
     }
@@ -96,7 +96,7 @@ export async function clearSession() {
 }
 
 export async function requireRole(
-  min: SessionRole = 'guest'
+  min: SessionRole = 'viewer'
 ): Promise<Session> {
   const sess = await getSession();
   if (!sess)

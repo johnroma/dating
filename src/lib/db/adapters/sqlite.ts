@@ -3,10 +3,11 @@ import path from 'node:path';
 
 import Database from 'better-sqlite3';
 
-import { mapRowToPhoto } from '@/src/lib/db/adapters/common';
-import { ensureSqliteSchema } from '@/src/lib/db/ensure-sqlite';
-import type { DbPort } from '@/src/lib/db/port';
-import type { Photo } from '@/src/lib/db/types';
+import { ensureSqliteSchema } from '../ensure-sqlite';
+import type { DbPort } from '../port';
+import type { Photo } from '../types';
+
+import { mapRowToPhoto } from './common';
 
 // Simple sql template literal for ESLint sql plugin
 const sql = (strings: TemplateStringsArray, ...values: unknown[]) => {
@@ -19,7 +20,7 @@ const sql = (strings: TemplateStringsArray, ...values: unknown[]) => {
 // On Vercel builds, prevent accidental import of sqlite adapter when not selected
 if (
   process.env.VERCEL &&
-  (process.env.DB_DRIVER ?? '').toLowerCase() !== 'sqlite'
+  (process.env.DB_DRIVER || '').toLowerCase() !== 'sqlite'
 ) {
   throw new Error(
     'sqlite.ts should not be imported on Vercel when DB_DRIVER!=sqlite'
@@ -31,7 +32,7 @@ let db: InstanceType<typeof Database> | null = null;
 function getConn() {
   if (db) return db;
   const file =
-    process.env.DATABASE_FILE ?? path.join(process.cwd(), '.data/db/dev.db');
+    process.env.DATABASE_FILE || path.join(process.cwd(), '.data/db/dev.db');
   const dir = path.dirname(file);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -125,7 +126,7 @@ export const insertPhoto: DbPort['insertPhoto'] = (p, _userEmail?: string) => {
       p.id,
       p.status,
       p.origkey,
-      JSON.stringify(p.sizesjson),
+      JSON.stringify(p.sizesjson || {}),
       p.width ?? null,
       p.height ?? null,
       p.createdat,
@@ -152,7 +153,7 @@ export const updatePhotoSizes: DbPort['updatePhotoSizes'] = (
 ) => {
   try {
     stmtUpdateSizes.run(
-      JSON.stringify(sizesjson),
+      JSON.stringify(sizesjson || {}),
       width ?? null,
       height ?? null,
       new Date().toISOString(),
@@ -454,7 +455,7 @@ export const listMembers = (): {
       displayname: string;
       role: 'member' | 'admin';
     }[];
-    return rows.map(row => ({
+    return (rows || []).map(row => ({
       id: row.id,
       displayName: row.displayname,
       role: row.role,

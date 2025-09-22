@@ -1,10 +1,10 @@
 import { Readable } from 'node:stream';
 
 import {
+  S3Client,
+  PutObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
-  PutObjectCommand,
-  S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import mime from 'mime';
@@ -18,7 +18,7 @@ function required(name: string): string {
 }
 
 const endpoint = process.env.S3_ENDPOINT;
-const region = process.env.S3_REGION ?? 'auto';
+const region = process.env.S3_REGION || 'auto';
 const accessKeyId = process.env.S3_ACCESS_KEY_ID;
 const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY;
 
@@ -62,13 +62,10 @@ async function streamToBuffer(
   if (typeof (stream as ReadableStream).getReader === 'function') {
     const reader = (stream as ReadableStream).getReader();
     const chunks: Uint8Array[] = [];
-    let done = false;
-    while (!done) {
-      const { done: isDone, value } = await reader.read();
-      done = isDone;
-      if (!done) {
-        chunks.push(value);
-      }
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
     }
     return Buffer.concat(chunks.map(u => Buffer.from(u)));
   }
@@ -83,7 +80,7 @@ async function streamToBuffer(
 
 export const storage: StoragePort = {
   async putOriginal(key, buf) {
-    const contentType = mime.getType(key) ?? 'application/octet-stream';
+    const contentType = mime.getType(key) || 'application/octet-stream';
     await client.send(
       new PutObjectCommand({
         Bucket: BUCKET_ORIG(),
@@ -110,7 +107,7 @@ export const storage: StoragePort = {
   },
 
   async getOriginalPresignedUrl(key) {
-    const expiresIn = Number(process.env.PRESIGN_TTL_SECONDS ?? 300);
+    const expiresIn = Number(process.env.PRESIGN_TTL_SECONDS || 300);
     const cmd = new GetObjectCommand({
       Bucket: BUCKET_ORIG(),
       Key: `orig/${key}`,

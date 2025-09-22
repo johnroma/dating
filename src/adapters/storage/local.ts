@@ -1,10 +1,10 @@
-import fs, { existsSync, mkdirSync } from 'node:fs';
+import fs, { mkdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
 import {
-  localCdnRoot,
-  localOrigRoot,
   localStorageRoot,
+  localOrigRoot,
+  localCdnRoot,
 } from '@/src/lib/storage/paths';
 import type { StoragePort } from '@/src/ports/storage';
 
@@ -15,10 +15,10 @@ export function ensureLocalStorageDirs() {
 }
 
 function baseUrl(): string {
-  const storageDriver = process.env.STORAGE_DRIVER ?? 'local';
+  const storageDriver = process.env.STORAGE_DRIVER || 'local';
   return storageDriver === 'r2'
-    ? (process.env.CDN_BASE_URL ?? '/mock-cdn')
-    : (process.env.NEXT_PUBLIC_CDN_BASE_URL ?? '/mock-cdn');
+    ? process.env.CDN_BASE_URL || '/mock-cdn'
+    : process.env.NEXT_PUBLIC_CDN_BASE_URL || '/mock-cdn';
 }
 
 async function rmIfExists(absPath: string): Promise<void> {

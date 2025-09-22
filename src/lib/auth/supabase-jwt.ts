@@ -1,9 +1,9 @@
 // JWKS-based verification for Supabase ES256 tokens.
 // Lightweight and vendor-agnostic using `jose`.
-import { createRemoteJWKSet, JWTPayload, jwtVerify } from 'jose';
+import { createRemoteJWKSet, jwtVerify, JWTPayload } from 'jose';
 import { cookies } from 'next/headers';
 
-export type SessionRole = 'guest' | 'member' | 'admin';
+export type SessionRole = 'viewer' | 'member' | 'admin';
 export type Session = {
   userId: string;
   email?: string;
@@ -11,7 +11,7 @@ export type Session = {
 } | null;
 
 function projectRef(): string {
-  const ref = process.env.SUPABASE_PROJECT_REF ?? '';
+  const ref = process.env.SUPABASE_PROJECT_REF || '';
   if (!ref)
     throw new Error('SUPABASE_PROJECT_REF is required for JWKS verification');
   return ref;
@@ -19,7 +19,7 @@ function projectRef(): string {
 
 function jwksUrl(): URL {
   const u =
-    process.env.SUPABASE_JWKS_URL ??
+    process.env.SUPABASE_JWKS_URL ||
     `https://${projectRef()}.supabase.co/auth/v1/keys`;
   return new URL(u);
 }
@@ -29,7 +29,7 @@ let cachedJwks: ReturnType<typeof createRemoteJWKSet> | null = null;
 function hasSupabaseAuthConfig(): boolean {
   // JWKS fetch requires either an explicit JWKS URL or a project ref; SUPABASE_URL is not required
   return Boolean(
-    process.env.SUPABASE_JWKS_URL ?? process.env.SUPABASE_PROJECT_REF
+    process.env.SUPABASE_JWKS_URL || process.env.SUPABASE_PROJECT_REF
   );
 }
 
@@ -55,7 +55,7 @@ function pickAccessTokenCookie(all: Map<string, string>): string | undefined {
 }
 
 function normalizeRole(email?: string): SessionRole {
-  const admins = (process.env.SUPABASE_ADMIN_EMAILS ?? '')
+  const admins = (process.env.SUPABASE_ADMIN_EMAILS || '')
     .split(',')
     .map(s => s.trim().toLowerCase())
     .filter(Boolean);
@@ -75,16 +75,19 @@ export async function readSupabaseSession(): Promise<Session> {
 
   try {
     const jwks = getJwks();
+    if (!jwks) {
+      return null;
+    }
 
     // Verify signature via JWKS; omit strict issuer check to avoid env mismatches
     const { payload } = await jwtVerify(token, jwks);
 
     const email =
-      (payload.email as string | undefined) ??
+      (payload.email as string | undefined) ||
       ((payload.user_metadata as JWTPayload | undefined)?.email as
         | string
         | undefined);
-    const userId = (payload.sub as string | undefined) ?? '';
+    const userId = (payload.sub as string | undefined) || '';
 
     if (!userId) {
       return null;
@@ -146,14 +149,14 @@ async function checkUserExistsInDatabase(userId: string): Promise<boolean> {
       ).listMembers?.();
       const members =
         membersResult instanceof Promise ? await membersResult : membersResult;
-      const exists = (members ?? []).some(
+      const exists = (members || []).some(
         (member: { id: string }) => member.id === userId
       );
 
       return exists;
     })();
 
-    const timeoutPromise = new Promise<boolean>((resolve, reject) => {
+    const timeoutPromise = new Promise<boolean>((_, reject) => {
       setTimeout(() => reject(new Error('Database check timeout')), 3000);
     });
 

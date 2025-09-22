@@ -22,7 +22,7 @@ export const ROUTES = {
 // ============================================================================
 
 export const SESSION_ROLES = {
-  GUEST: 'guest',
+  VIEWER: 'viewer',
   MEMBER: 'member',
   ADMIN: 'admin',
 } as const;
@@ -177,5 +177,5 @@ export function getDevLoginUrl(from?: string): string {
 }
 
 export function getRedirectUrl(from?: string): string {
-  return from ?? ROUTES.HOME;
+  return from || ROUTES.HOME;
 }

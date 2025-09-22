@@ -20,8 +20,8 @@ async function deriveOrigin(): Promise<string> {
   // 2) Use request headers when available (Vercel/runtime safe)
   try {
     const h = await headers();
-    const host = h.get('x-forwarded-host') ?? h.get('host');
-    const proto = h.get('x-forwarded-proto') ?? 'https';
+    const host = h.get('x-forwarded-host') || h.get('host');
+    const proto = h.get('x-forwarded-proto') || 'https';
     if (host) return `${proto}://${host}`;
   } catch {
     // Not in a request context
@@ -44,7 +44,7 @@ async function readSupabaseEnv(): Promise<SupabaseEnv | null> {
     anonKey,
     origin,
     secureCookie: process.env.NODE_ENV === 'production',
-    projectRef: process.env.SUPABASE_PROJECT_REF ?? '',
+    projectRef: process.env.SUPABASE_PROJECT_REF || '',
   };
 }
 
@@ -95,9 +95,9 @@ const loginAction = async (formData: FormData) => {
   }
   const config: SupabaseEnv = env;
 
-  const intent = String(formData.get('intent') ?? '');
-  const email = String(formData.get('email') ?? '').trim();
-  const password = String(formData.get('password') ?? '');
+  const intent = String(formData.get('intent') || '');
+  const email = String(formData.get('email') || '').trim();
+  const password = String(formData.get('password') || '');
 
   if (intent === 'signout') {
     const jar = await cookies();
@@ -233,7 +233,7 @@ export default async function Page({
   const sess = await readSupabaseSession();
   const params = await searchParams;
   const getParam = (key: string) => {
-    const value = params[key];
+    const value = params?.[key];
     return Array.isArray(value) ? value[0] : value;
   };
   const error = getParam('error');
@@ -244,7 +244,7 @@ export default async function Page({
       <h1 className='text-2xl font-semibold'>Supabase Dev Login</h1>
 
       <div className='rounded border p-4'>
-        {(error ?? success) && (
+        {(error || success) && (
           <div className='mb-3'>
             {error && <p className='text-sm text-red-600'>Error: {error}</p>}
             {success && (
@@ -256,7 +256,7 @@ export default async function Page({
           Status:{' '}
           {sess ? (
             <span>
-              <strong>{sess.email ?? sess.userId}</strong> ({sess.role})
+              <strong>{sess.email || sess.userId}</strong> ({sess.role})
             </span>
           ) : (
             <em>Anon</em>

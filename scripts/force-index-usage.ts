@@ -4,7 +4,7 @@
  * Force index usage and update statistics
  */
 
-import { dbPool } from '@/scripts/shared-db-config';
+import { dbPool } from './shared-db-config';
 
 async function forceIndexUsage() {
   console.log('🔧 Forcing index usage and updating statistics...');
@@ -34,7 +34,7 @@ async function forceIndexUsage() {
     const originalPlan = originalQuery.rows[0]['QUERY PLAN'][0];
     console.log(`- Execution time: ${originalPlan['Execution Time']}ms`);
     console.log(
-      `- Index used: ${originalPlan.Plan?.['Index Name'] ?? 'No index'}`
+      `- Index used: ${originalPlan.Plan?.['Index Name'] || 'No index'}`
     );
 
     // 2. Force index usage with hint
@@ -50,7 +50,7 @@ async function forceIndexUsage() {
 
     const hintPlan = hintQuery.rows[0]['QUERY PLAN'][0];
     console.log(`- Execution time: ${hintPlan['Execution Time']}ms`);
-    console.log(`- Index used: ${hintPlan.Plan?.['Index Name'] ?? 'No index'}`);
+    console.log(`- Index used: ${hintPlan.Plan?.['Index Name'] || 'No index'}`);
 
     // 3. Test with different column order
     console.log('\n3. Query with different column order:');
@@ -65,7 +65,7 @@ async function forceIndexUsage() {
 
     const altPlan = altQuery.rows[0]['QUERY PLAN'][0];
     console.log(`- Execution time: ${altPlan['Execution Time']}ms`);
-    console.log(`- Index used: ${altPlan.Plan?.['Index Name'] ?? 'No index'}`);
+    console.log(`- Index used: ${altPlan.Plan?.['Index Name'] || 'No index'}`);
 
     // 4. Check if we can force index usage with SET
     console.log('\n4. Forcing index usage with session settings:');
@@ -84,7 +84,7 @@ async function forceIndexUsage() {
     const forcedPlan = forcedQuery.rows[0]['QUERY PLAN'][0];
     console.log(`- Execution time: ${forcedPlan['Execution Time']}ms`);
     console.log(
-      `- Index used: ${forcedPlan.Plan?.['Index Name'] ?? 'No index'}`
+      `- Index used: ${forcedPlan.Plan?.['Index Name'] || 'No index'}`
     );
 
     // Reset settings

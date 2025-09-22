@@ -39,7 +39,7 @@ async function getSupabaseUserId() {
             Array<{ id: string; displayName: string; role: string }>
           >;
         }
-      ).listMembers?.()) ?? [];
+      ).listMembers?.()) || [];
     console.table(users);
   } catch (error) {
     console.error('Error:', error);

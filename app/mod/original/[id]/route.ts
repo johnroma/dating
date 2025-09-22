@@ -1,13 +1,13 @@
+export const runtime = 'nodejs';
+
 import fs from 'node:fs';
 
 import { NextResponse } from 'next/server';
 
 import { getDb } from '@/src/lib/db';
-import { exists, origPath } from '@/src/lib/storage/fs';
+import { origPath, exists } from '@/src/lib/storage/fs';
 import { getSession } from '@/src/ports/auth';
 import { getStorage } from '@/src/ports/storage';
-
-export const runtime = 'nodejs';
 
 export async function GET(
   _req: Request,
@@ -25,7 +25,7 @@ export async function GET(
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
 
   // If using R2/S3, redirect to a short-lived signed URL for the original
-  if ((process.env.STORAGE_DRIVER ?? 'local').toLowerCase() === 'r2') {
+  if ((process.env.STORAGE_DRIVER || 'local').toLowerCase() === 'r2') {
     const storage = await getStorage();
     const url = await storage.getOriginalPresignedUrl(photo.origkey);
     return NextResponse.redirect(url, { status: 302 });

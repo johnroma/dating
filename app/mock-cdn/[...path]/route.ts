@@ -16,7 +16,7 @@ export async function GET(
   ctx: { params: Promise<{ path: string[] }> }
 ) {
   // PRODUCTION (R2): never serve from /mock-cdn — variants are on CDN_BASE_URL.
-  if ((process.env.STORAGE_DRIVER ?? 'local') !== 'local') {
+  if ((process.env.STORAGE_DRIVER || 'local') !== 'local') {
     return new NextResponse(null, {
       status: 410,
       headers: { 'Cache-Control': 'public, max-age=31536000, immutable' },
@@ -28,7 +28,7 @@ export async function GET(
   const { createReadStream, statSync } = await import('node:fs');
 
   const { path: segs } = await ctx.params;
-  const [photoId, file] = [segs[0], segs[1]]; // e.g. sm.webp | md.webp | lg.webp
+  const [photoId, file] = [segs?.[0], segs?.[1]]; // e.g. sm.webp | md.webp | lg.webp
   if (!photoId || !file) {
     return NextResponse.json({ error: 'bad path' }, { status: 400 });
   }
@@ -39,7 +39,7 @@ export async function GET(
     const db = getDb();
     const photo = await db.getPhoto(photoId);
     // Parse sess cookie from raw header (no HMAC verify here)
-    const cookie = _req.headers.get('cookie') ?? '';
+    const cookie = _req.headers.get('cookie') || '';
     const sessRaw = cookie
       .split(/;\s*/)
       .map(kv => kv.split('='))
